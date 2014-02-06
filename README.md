@@ -15,6 +15,7 @@ Before running the app you will need to have R and RStudio installed (tested wit
   - install.packages("beeswarm")
   - install.packages("vioplot")
   - install.packages("beanplot")
+  - install.packages("RColorBrewer")
 
 - Run the tool:
   - shiny::runGitHub("shiny-boxplot", "jwildenhain")
