@@ -32,16 +32,16 @@ Your web browser will open the web app.
 		- sudo gdebi shiny-server-1.0.0.42-amd64.deb
 		- edit: /opt/shiny-server/config/default.config
 		- Change these lines to suit your environment
-				- listen <SHINY_PORT>; (change <SHINY_PORT> to match the port you want)
-				- site_dir <SHINY_APP_HOME>; (change <SHINY_APP_HOME> to the location for your shiny apps)
-		- make sure <SHINY_PORT> is open on your firewall
-		- Go to your <SHINY_APP_HOME>
-			- cd <SHINY_APP_HOME>
+		  - listen **SHINY_PORT**; (change **SHINY_PORT** to match the port you want)
+		  - site_dir **SHINY_APP_HOME**; (change **SHINY_APP_HOME** to the location for your shiny apps)
+		- make sure **SHINY_PORT** is open on your firewall
+		- Go to your **SHINY_APP_HOME**
+		  - cd <SHINY_APP_HOME>
 		- Get the latest shiny-boxplot code from github:
-			- wget https://github.com/jwildenhain/shiny-boxplot/archive/master.zip
-			- unzip master.zip
-			- mv shiny-boxplot-master shiny-boxplot
+		  - wget https://github.com/jwildenhain/shiny-boxplot/archive/master.zip
+		  - unzip master.zip
+		  - mv shiny-boxplot-master shiny-boxplot
 		- Restart shiny-server service:
-			- sudo service shiny-server restart
+		  - sudo service shiny-server restart
 
-You should now be able to access shiny-boxplot at: http://YOURSITE:<SHINY_PORT>/shiny-boxplot
+You should now be able to access shiny-boxplot at: http://YOURSITE:**SHINY_PORT**/shiny-boxplot
