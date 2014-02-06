@@ -27,11 +27,11 @@ Your web browser will open the web app.
   
 2) Install the Shiny-Server and implement it as a web application and service:
   - In Ubuntu 12.04+
-		- sudo apt-get install gdebi-core
-		- wget http://download3.rstudio.org/ubuntu-12.04/x86_64/shiny-server-1.0.0.42-amd64.deb (may need to change ubuntu or server version number)
+    - sudo apt-get install gdebi-core
+    - wget http://download3.rstudio.org/ubuntu-12.04/x86_64/shiny-server-1.0.0.42-amd64.deb (may need to change ubuntu or server version number)
 		- sudo gdebi shiny-server-1.0.0.42-amd64.deb
 		- edit: /opt/shiny-server/config/default.config
-			- Change these lines to suit your environment
+		- Change these lines to suit your environment
 				- listen <SHINY_PORT>; (change <SHINY_PORT> to match the port you want)
 				- site_dir <SHINY_APP_HOME>; (change <SHINY_APP_HOME> to the location for your shiny apps)
 		- make sure <SHINY_PORT> is open on your firewall
