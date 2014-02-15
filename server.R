@@ -1,4 +1,3 @@
-# remove error message at start - Please select sample data, load a file or paste your data into the text box.
 shinyServer(function(input, output, session) {
 
 	library(RColorBrewer)
@@ -14,7 +13,6 @@ shinyServer(function(input, output, session) {
 	})
 	# *** Read in data matrix ***
 	dataM <- reactive({
-		#radioButtons("dataInput", "", list("Load sample data"=1,"Upload file"=2,"Paste data"=3)),
 		if(input$dataInput==1){
 			if(input$sampleData==1){
 				data<-read.table("Boxplot_testData2.csv", sep=",", header=TRUE, fill=TRUE)			
@@ -27,23 +25,21 @@ shinyServer(function(input, output, session) {
 			if (is.null(input$upload))  {return(NULL)}
 			# Get the separator
 			mySep<-switch(input$fileSepDF, '1'=",",'2'="\t",'3'=";", '4'="") #list("Comma"=1,"Tab"=2,"Semicolon"=3)
-			data<-read.table(inFile$datapath, sep=mySep, header=TRUE, fill=TRUE)
+			if(file.info(inFile$datapath)$size<=10485800){
+				data<-read.table(inFile$datapath, sep=mySep, header=TRUE, fill=TRUE)
+			} else print("File is bigger than 10MB and will not be uploaded.")
 		} else { # To be looked into again - for special case when last column has empty entries in some rows
 			if(is.null(input$myData)) {return(NULL)} 
 			tmp<-matrix(strsplit(input$myData, "\n")[[1]])
-			print(tmp)
 			mySep<-switch(input$fileSepP, '1'=",",'2'="\t",'3'=";")
 			myColnames<-strsplit(tmp[1], mySep)[[1]]
-			print(myColnames)
 			data<-matrix(0, length(tmp)-1, length(myColnames))
 			colnames(data)<-myColnames
 			for(i in 2:length(tmp)){
-				print(paste(tmp[i],mySep,sep=""))
 				myRow<-as.numeric(strsplit(paste(tmp[i],mySep,mySep,sep=""), mySep)[[1]])
-				print(myRow)
-				print(myRow[-length(myRow)])
 				data[i-1,]<-myRow[-length(myRow)]
-			}		
+			}
+			data<-data.frame(data)		
 		}
 		return(data)
 	})
@@ -111,6 +107,17 @@ shinyServer(function(input, output, session) {
 			plotDataM[,i]<-c(rep(myLim[2]+10, nrow(plotData)-1),myLim[2]+20)
 		}
 
+		# Angle the sample names
+		if(input$xaxisLabelAngle){ 
+			xaxisLabelAngleNr<-45
+			labelPos<-2
+		} else { 
+			xaxisLabelAngleNr<-0
+			labelPos<-1
+		}
+
+		par(mar=c(12.1, 11.1, 4.1, 2.1))
+
 		# *** 1) Vertical boxplots ***
 		par(las=1)
 		if(as.numeric(input$myOrientation)==0){
@@ -120,11 +127,12 @@ shinyServer(function(input, output, session) {
 					cex.lab=input$cexAxislabel/10, cex.axis=input$cexAxis/10, cex.main=input$cexTitle/10, 
 					main=input$myTitle, sub=input$mySubtitle, horizontal=as.numeric(input$myOrientation), frame=F, 
 					na.rm=TRUE, xaxt="n", range=myRange(), varwidth=input$myVarwidth, notch=input$myNotch) #notch=TRUE
-				axis(1,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10)
-#				text(x=c(1:nrOfSamples), y=rep(myLim[1]-3,nrOfSamples), labels=colnames(plotData), srt=input$xaxisLabelAngle, pos=1)
+				axis(1,at=c(1:nrOfSamples), labels=FALSE, cex.axis=input$cexAxis/10) #
+				text(x=c(1:nrOfSamples), y=rep(myLim[1]-3,nrOfSamples), labels=colnames(plotData), 
+					pos=labelPos, xpd=TRUE, srt=xaxisLabelAngleNr, cex=input$cexAxis/10)
 				# * Add data points to plot if selected *
 				if(input$showDataPoints==TRUE){
-					if(length(plotPoints)==0){ # all samples are boxplots --> add points for all of them
+					if(length(plotPoints)==0){ # all samples are box plots --> add points for all of them
 						if(input$datapointType==0){
 							for(i in c(1:nrOfSamples)){ points(rep(i, nrow(plotData)), plotData[,i], col="black") }
 						} else { beeswarm(plotData, add=TRUE) }
@@ -140,11 +148,20 @@ shinyServer(function(input, output, session) {
 					vioplot(as.list(data.frame(plotDataM)), col=myColours2, ylim=myLim, cex.axis=input$cexAxis/10, 
 						horizontal=as.numeric(input$myOrientation), range=myRange(), border=input$violinBorder)
 					title(main=input$myTitle, ylab=input$myYlab, xlab=input$myXlab, cex.main=input$cexTitle/10, cex.lab=input$cexAxislabel/10)
-					axis(1,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10, sub=input$mySubtitle)
+#					axis(1,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10, sub=input$mySubtitle)
+					axis(1,at=c(1:nrOfSamples), labels=FALSE, cex.axis=input$cexAxis/10) #
+					text(x=c(1:nrOfSamples), y=rep(myLim[1]-3,nrOfSamples), labels=colnames(plotData), 
+						pos=labelPos, xpd=TRUE, srt=xaxisLabelAngleNr, cex=input$cexAxis/10)
+
 				} else {
-					beanplot(data.frame(plotDataM[,notPlotPoints]), at=notPlotPoints, ylim=myLim, horizontal=as.numeric(input$myOrientation), xlim=c(0.5, ncol(plotDataM)+0.5), col=myColours2, border=input$beanBorder)
+					beanplot(data.frame(plotDataM[,notPlotPoints]), at=notPlotPoints, ylim=myLim, 
+						horizontal=as.numeric(input$myOrientation), xlim=c(0.5, ncol(plotDataM)+0.5), 
+						col=myColours2, border=input$beanBorder)
 					title(main=input$myTitle, ylab=input$myYlab, xlab=input$myXlab, cex.main=input$cexTitle/10, cex.lab=input$cexAxislabel/10)
-					axis(1,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10)				
+	#				axis(1,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10)				
+					axis(1,at=c(1:nrOfSamples), labels=FALSE, cex.axis=input$cexAxis/10) #
+#					text(x=c(1:nrOfSamples), y=rep(myLim[1]-3,nrOfSamples), labels=colnames(plotData), 
+#					pos=labelPos, xpd=TRUE, srt=xaxisLabelAngleNr, cex=input$cexAxis/10)
 				}
 			}
 			# * Add points for samples with less then mnp data points *
@@ -202,11 +219,13 @@ shinyServer(function(input, output, session) {
 						horizontal=as.numeric(input$myOrientation), range=myRange(), border=input$violinBorder)
 					title(main=input$myTitle, ylab=input$myYlab, xlab=input$myXlab, cex.main=input$cexTitle/10, cex.lab=input$cexAxislabel/10)
 					axis(2,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10)
+
 				} else { # Bean plot
-					beanplot(data.frame(plotDataM), ylim=myLim, horizontal=as.numeric(input$myOrientation), 
-					xlim=c(0.5, ncol(plotDataM)+0.5), col=myColours2, border=input$beanBorder, beanlines='median', overallline=beanlines)
+					beanplot(data.frame(plotDataM[,notPlotPoints]), at=notPlotPoints, ylim=myLim, 
+					horizontal=as.numeric(input$myOrientation), xlim=c(0.5, ncol(plotDataM)+0.5), 
+					col=myColours2, border=input$beanBorder)
 					title(main=input$myTitle, ylab=input$myYlab, xlab=input$myXlab, cex.main=input$cexTitle/10, cex.lab=input$cexAxislabel/10)
-					axis(2,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10)
+					axis(2,at=c(1:nrOfSamples), labels=FALSE, cex.axis=input$cexAxis/10) # labels=colnames(plotData)
 				}
 			}
 
@@ -228,7 +247,6 @@ shinyServer(function(input, output, session) {
 				if(input$addMeanCI==TRUE){ 
 					# Calculate the error using the quartile function * Standard error; SE=sd/sqrt(n)
 					myQuartile<-1-((1-(as.numeric(input$meanCI)/100))/2)
-					print(myQuartile)
 					myError<-qt(myQuartile, df=(boxplotStats()$n)-1)*(apply(dataM(), 2, sd, na.rm=TRUE)/sapply(boxplotStats()$n, sqrt))
 					for(ii in 1:ncol(dataM())) { 
 #						lines(y=c(ii,ii), x=c(boxplotMeans[ii]-myError[ii], boxplotMeans[ii]+myError[ii]), col="red") 
@@ -248,11 +266,15 @@ shinyServer(function(input, output, session) {
 
 	## *** Data in table ***
 	output$filetable <- renderTable({
-		return(dataM())
+		print(nrow(dataM()))
+		if(nrow(dataM())<500){
+			return(dataM())
+		} else {return(dataM()[1:100,])}
 	})
 
 	# *** Boxplot (using 'generateBoxPlot'-function) ***
 	output$boxPlot <- renderPlot({
+		print(class(dataM()))
 		generateBoxPlot(dataM())
 	}, height = heightSize, width = widthSize)
 	
@@ -260,7 +282,6 @@ shinyServer(function(input, output, session) {
 	output$downloadPlotEPS <- downloadHandler(
 		filename <- function() { paste('Boxplot.eps') },
 		content <- function(file) {
-			print(widthSize)
 			postscript(file, horizontal = FALSE, onefile = FALSE, paper = "special", width = input$myWidth/72, height = input$myHeight/72)
 			## ---------------
 			generateBoxPlot(dataM())
@@ -273,7 +294,6 @@ shinyServer(function(input, output, session) {
 	output$downloadPlotPDF <- downloadHandler(
 		filename <- function() { paste('Boxplot.pdf') },
 		content <- function(file) {
-			print(widthSize)
 			pdf(file, width = input$myWidth/72, height = input$myHeight/72)
 			## ---------------
 			generateBoxPlot(dataM())
@@ -286,7 +306,6 @@ shinyServer(function(input, output, session) {
 	output$downloadPlotSVG <- downloadHandler(
 		filename <- function() { paste('Boxplot.svg') },
 		content <- function(file) {
-			print(widthSize)
 			svg(file, width = input$myWidth/72, height = input$myHeight/72)
 			## ---------------
 			generateBoxPlot(dataM())

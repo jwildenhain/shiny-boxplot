@@ -113,6 +113,7 @@ shinyUI(pageWithSidebar(
 
 			checkboxInput("labelsTitle", "Modify labels and title", FALSE),
 			conditionalPanel(condition="input.labelsTitle",
+				checkboxInput("xaxisLabelAngle", "Rotate sample names", FALSE),
 				textInput("myXlab", "X-axis label:", value=c("")),
 				textInput("myYlab", "Y-axis label:", value=c("")),
 				textInput("myTitle", "Boxplot title:", value=c("")),
@@ -120,14 +121,14 @@ shinyUI(pageWithSidebar(
 			),
 			checkboxInput("plotSize", "Adjust plot size", FALSE),
 			conditionalPanel(condition="input.plotSize",
-				numericInput("myHeight", "Plot height:", value=500),
+				numericInput("myHeight", "Plot height:", value=550),
 				numericInput("myWidth", "Plot width:", value=750)
 			),
 			checkboxInput("fontSizes", "Change font sizes", FALSE),
 			conditionalPanel(condition="input.fontSizes",
-				numericInput("cexTitle", "Title font size:", value=10),
-				numericInput("cexAxislabel", "Axis label size:", value=10),
-				numericInput("cexAxis", "Axis font size:", value=10)
+				numericInput("cexTitle", "Title font size:", value=14),
+				numericInput("cexAxislabel", "Axis label size:", value=14),
+				numericInput("cexAxis", "Axis font size:", value=12)
 			),
 			#textInput("myColours", "Colour(s):", value=c("0xA50026, 0xD73027, 0xF46D43, orange, yellow")), # colours
 			#textInput("myColours", "Colour(s):", value=c("0xF7F7F7, 0xCCCCCC, 0x969696, 0x636363, 0x252525")), # 5 shades of grey
@@ -137,7 +138,6 @@ shinyUI(pageWithSidebar(
 			conditionalPanel(condition="input.myOrientation=='0'",
 				h5("Y-axis range (eg., '0,10'):"),
 				textInput("ylimit", "", value="")
-#				numericInput("xaxisLabelAngle", "Rotate sample names", value=45)
 			),
 			conditionalPanel(condition="input.myOrientation=='1'",
 				h5("X-axis range (eg., '0,10'):"),
@@ -192,11 +192,22 @@ shinyUI(pageWithSidebar(
 			), 
 			# Figure legend 
 			tabPanel("Figure legend template", h5("Box plot description for figure legend:"), textOutput("FigureLegend"),
-			h5("Further information to be added to the figure legend:"), p("What do the box plots show, explain colours if used."),
-			downloadButton("downloadBoxplotData", "Download box plot data as .CSV file"),
-			h6("This application was created by the ", a("Tyers", href="http://tyers.iric.ca/"), " and ", a("Rappsilber", href="http://rappsilberlab.org/"), 
-			" labs. Please send bugs and feature requests to Michaela Spitzer (michaela.spitzer(at)gmail.com) and Jan Wildenhain (jan.wildenhain(at)gmail.com). This application uses the ", 
-			a("shiny package from RStudio", href="http://www.rstudio.com/shiny/"), ".")),
+				h5("Further information to be added to the figure legend:"), p("What do the box plots show, explain colours if used."),
+				downloadButton("downloadBoxplotData", "Download box plot data as .CSV file"),
+				h6("This application was created by the ", a("Tyers", href="http://tyers.iric.ca/"), " and ", a("Rappsilber", href="http://rappsilberlab.org/"), 
+				" labs. Please send bugs and feature requests to Michaela Spitzer (michaela.spitzer(at)gmail.com) and Jan Wildenhain (jan.wildenhain(at)gmail.com). This application uses the ", 
+				a("shiny package from RStudio", href="http://www.rstudio.com/shiny/"), ".")
+			),
+			# FAQ 
+			tabPanel("FAQ",
+				h5("Q: I have trouble editing the graphic files."), 
+				p("A: For EPS files make sure to 'ungroup' all objects so they can be edited independently. 
+				In Adobe Illustrator you will also need to use the 'release compound path' command. For PDF 
+				files you should 'release clipping mask'. SVG import appears to have problems in Adobe Illustrator 
+				and Corel Draw and should be avoided. EPS, PDF and SVG import all work with Inkscape http://www.inkscape.org/.")
+#				h5("Further information to be added to the figure legend:"), 
+#				p("What do the box plots show, explain colours if used.")
+			),			
 			id="tabs1"
 			#tabPanel("Bar plot", plotOutput("barPlot", width='750px', height='100%'))
 		)
