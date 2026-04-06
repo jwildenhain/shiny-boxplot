@@ -1,3 +1,5 @@
+options(shiny.maxRequestSize = 200*1024^2)
+
 shinyServer(function(input, output, session) {
 
 	library(RColorBrewer)
@@ -6,6 +8,7 @@ shinyServer(function(input, output, session) {
 	source("MyVioplot.R")
 	library(beanplot)	 
 	source("boxplot_stats_Function.R")
+	source("BoxPlotR_functions.R")	
 	
 	observe({
 		if (input$clearText_button == 0) return()
@@ -15,9 +18,9 @@ shinyServer(function(input, output, session) {
 	dataM <- reactive({
 		if(input$dataInput==1){
 			if(input$sampleData==1){
-				data<-read.table("Boxplot_testData2.csv", sep=",", header=TRUE, fill=TRUE)			
+				data<-read.table("Boxplot_testData2.csv", sep=",", header=TRUE, fill=TRUE, check.names=FALSE)			
 			} else {
-				data<-read.table("Boxplot_testData.txt", sep=",", header=TRUE)		
+				data<-read.table("Boxplot_testData.txt", sep=",", header=TRUE, check.names=FALSE)
 			}
 		} else if(input$dataInput==2){
 			inFile <- input$upload
@@ -25,21 +28,19 @@ shinyServer(function(input, output, session) {
 			if (is.null(input$upload))  {return(NULL)}
 			# Get the separator
 			mySep<-switch(input$fileSepDF, '1'=",",'2'="\t",'3'=";", '4'="") #list("Comma"=1,"Tab"=2,"Semicolon"=3)
-			if(file.info(inFile$datapath)$size<=10485800){
-				data<-read.table(inFile$datapath, sep=mySep, header=TRUE, fill=TRUE)
-			} else print("File is bigger than 10MB and will not be uploaded.")
+				data<-read.table(inFile$datapath, sep=mySep, header=TRUE, fill=TRUE, check.names=FALSE)
 		} else { # To be looked into again - for special case when last column has empty entries in some rows
-			if(is.null(input$myData)) {return(NULL)} 
+			if(is.null(input$myData)) {return(NULL)}
 			tmp<-matrix(strsplit(input$myData, "\n")[[1]])
 			mySep<-switch(input$fileSepP, '1'=",",'2'="\t",'3'=";")
 			myColnames<-strsplit(tmp[1], mySep)[[1]]
-			data<-matrix(0, length(tmp)-1, length(myColnames))
-			colnames(data)<-myColnames
+			data<-matrix(0, length(tmp)-1, length(myColnames), dimnames=list(NULL,myColnames))
 			for(i in 2:length(tmp)){
 				myRow<-as.numeric(strsplit(paste(tmp[i],mySep,mySep,sep=""), mySep)[[1]])
 				data[i-1,]<-myRow[-length(myRow)]
 			}
-			data<-data.frame(data)		
+			data<-data.frame(data)
+			names(data)<-myColnames
 		}
 		return(data)
 	})
@@ -66,24 +67,40 @@ shinyServer(function(input, output, session) {
 	# *** Generate the box plot ***
 	generateBoxPlot<-function(plotData){
 		par(mar=c(5,8,4,2)) # c(bottom, left, top, right)
+
 		myColours<-gsub("\\s","", strsplit(input$myColours,",")[[1]])
 		myColours<-gsub("0x","#", myColours)
 
 		myColours2<-gsub("\\s","", strsplit(input$myOtherPlotColours,",")[[1]])
 		myColours2<-gsub("0x","#", myColours2)
 
+		pointColors<-gsub("\\s","", strsplit(input$pointColors,",")[[1]])
+		pointColors<-gsub("0x","#", pointColors)
+
+		pointTransparency<-100-input$pointTransparency
 
 		nrOfSamples<-ncol(plotData)
-		# generate colour vector
+		# Display median or mean for bean plot?
+		if(input$beanPlotMedianMean==0){ myBeanplotCenter<-"median" } else { myBeanplotCenter<-"mean" }
+		# Generate colour vector
 		if(length(myColours)==1){
 			myColours<-rep(myColours, nrOfSamples)
 		} else if(length(myColours) < nrOfSamples){
 			myColours<-rep(myColours,times=(round(nrOfSamples/length(myColours)))+1)
 		}
+		
+		# Generate colour vector for points
+		if(length(pointColors)==1){
+			pointColors<-rep(pointColors, nrOfSamples)
+		} else if(length(pointColors) < nrOfSamples){
+			pointColors<-rep(pointColors,times=(round(nrOfSamples/length(pointColors)))+1)
+		}
+
 		plotPoints<-c() # vector for indices of samples that are to be plotted as points, not as boxplots
 		notPlotPoints <- seq(1:nrOfSamples) # samples to plot as boxes/violins/beans
 		plotDataM<-plotData
 		# Determine plot range
+		myBuffer<-max(abs(range(plotData,na.rm=TRUE)))*0.1 # add 10% of data maximum at each end of y/x axis
 		if(as.numeric(input$myOrientation)==0){		
 			if(input$ylimit==""){myLim<-range(plotData,na.rm=TRUE)+c(-1,+1)} else {myLim<-as.numeric(strsplit(input$ylimit,",")[[1]])}
 		} else {
@@ -93,7 +110,7 @@ shinyServer(function(input, output, session) {
 		datapointCounts<-apply(!apply(plotData, 2, is.na),2,sum) # Count number of valid data points for each sample
 		# Check if columns with few data points should be plotted as points
 
-		# minimum number of points is 4 -> check that nrOfDataPoints is larger than that		
+		# minimum number of points is 4 -> check that nrOfDataPoints is ay least 4		
 		mnp<-max(4,input$nrOfDataPoints)
 		
 		if(input$plotDataPoints==TRUE){
@@ -102,7 +119,8 @@ shinyServer(function(input, output, session) {
 			notPlotPoints <- seq(1:nrOfSamples)[datapointCounts>=mnp] # samples to plot as boxes/violins/beans
 		}
 
-		# Generate plotDataM matrix such that columns that should be plotted as points are filled with data points outside of visible plot area to 'reserve' spot for points
+		# Generate plotDataM matrix such that columns that should be plotted as points are filled with data points 
+		# outside of visible plot area to 'reserve' spot for points
 		for(i in plotPoints){
 			plotDataM[,i]<-c(rep(myLim[2]+10, nrow(plotData)-1),myLim[2]+20)
 		}
@@ -117,36 +135,42 @@ shinyServer(function(input, output, session) {
 		}
 
 		par(mar=c(12.1, 11.1, 4.1, 2.1))
-
+		
+		if(input$showDataPoints==TRUE) {
+			plotOutliers=FALSE
+		} else {
+			plotOutliers=TRUE
+		}
 		# *** 1) Vertical boxplots ***
 		par(las=1)
 		if(as.numeric(input$myOrientation)==0){
+			if(input$logScale==FALSE){ myLog="" } else { myLog="y"} # log scale for y-axis?
 			# *** Generate boxplot ***
 			if(input$plotType=='0'){
-				boxplot(plotDataM, col=myColours, ylab=input$myYlab, xlab=input$myXlab, ylim=myLim,
+				boxplot(plotDataM, col=myColours, ylab=input$myYlab, xlab=input$myXlab, ylim=myLim, log=myLog, outline=plotOutliers,
 					cex.lab=input$cexAxislabel/10, cex.axis=input$cexAxis/10, cex.main=input$cexTitle/10, 
 					main=input$myTitle, sub=input$mySubtitle, horizontal=as.numeric(input$myOrientation), frame=F, 
-					na.rm=TRUE, xaxt="n", range=myRange(), varwidth=input$myVarwidth, notch=input$myNotch) #notch=TRUE
+					na.rm=TRUE, xaxt="n", range=myRange(), varwidth=input$myVarwidth, notch=input$myNotch) #notch=TRUE, outpch=16
 				axis(1,at=c(1:nrOfSamples), labels=FALSE, cex.axis=input$cexAxis/10) #
-				text(x=c(1:nrOfSamples), y=rep(myLim[1]-3,nrOfSamples), labels=colnames(plotData), 
-					pos=labelPos, xpd=TRUE, srt=xaxisLabelAngleNr, cex=input$cexAxis/10)
-				# * Add data points to plot if selected *
+#				mtext(text=colnames(plotData), side=1, at=c(1:nrOfSamples), xpd=TRUE, srt=xaxisLabelAngleNr, cex=input$cexAxis/10)
+				text(x=c(1:nrOfSamples), y=rep(myLim[1]-(myLim[2]-myLim[1])/10,nrOfSamples), labels=colnames(plotData), pos=labelPos, xpd=TRUE, srt=xaxisLabelAngleNr, cex=input$cexAxis/10)
+
+				# *** Add data points to plot if selected ***
 				if(input$showDataPoints==TRUE){
-					if(length(plotPoints)==0){ # all samples are box plots --> add points for all of them
-						if(input$datapointType==0){
-							for(i in c(1:nrOfSamples)){ points(rep(i, nrow(plotData)), plotData[,i], col="black") }
-						} else { beeswarm(plotData, add=TRUE) }
-					} else { # remove the ones that are already plotted as points
-						if(input$datapointType==0){
-							for(i in c(1:nrOfSamples)[-plotPoints]){ points(rep(i, nrow(plotData)), plotData[,i], col="black") }
-						} else { beeswarm(plotData, add=TRUE) }
-#						} else { beeswarm(plotData[,-plotPoints], at=c(1:nrOfSamples)[-plotPoints], add=TRUE) }
-					}
+						if(input$datapointType==1){
+							beePointColors<-c()
+							for(i in 1:length(pointColors)){
+								beePointColors[i]<-rgb(t(col2rgb(pointColors[i])), max=255, alpha=255*(pointTransparency/100))
+							}
+							beeswarm(plotData, add=TRUE, col=beePointColors, cex=input$pointSize/10, pch=16)
+						} else { 
+							jittered.points(plotData, FALSE, input$datapointType, pointColors, pointTransparency, input$pointSize/10)
+						}			
 				}
 			} else { # *** Generate violin or bean plot ***
 				if(input$otherPlotType==0){ # Violin plot
 					vioplot(as.list(data.frame(plotDataM)), col=myColours2, ylim=myLim, cex.axis=input$cexAxis/10, 
-						horizontal=as.numeric(input$myOrientation), range=myRange(), border=input$violinBorder)
+						horizontal=as.numeric(input$myOrientation), border=input$violinBorder)
 					title(main=input$myTitle, ylab=input$myYlab, xlab=input$myXlab, cex.main=input$cexTitle/10, cex.lab=input$cexAxislabel/10)
 #					axis(1,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10, sub=input$mySubtitle)
 					axis(1,at=c(1:nrOfSamples), labels=FALSE, cex.axis=input$cexAxis/10) #
@@ -156,7 +180,7 @@ shinyServer(function(input, output, session) {
 				} else {
 					beanplot(data.frame(plotDataM[,notPlotPoints]), at=notPlotPoints, ylim=myLim, 
 						horizontal=as.numeric(input$myOrientation), xlim=c(0.5, ncol(plotDataM)+0.5), 
-						col=myColours2, border=input$beanBorder)
+						col=myColours2, border=input$beanBorder, overallline = myBeanplotCenter)
 					title(main=input$myTitle, ylab=input$myYlab, xlab=input$myXlab, cex.main=input$cexTitle/10, cex.lab=input$cexAxislabel/10)
 	#				axis(1,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10)				
 					axis(1,at=c(1:nrOfSamples), labels=FALSE, cex.axis=input$cexAxis/10) #
@@ -164,7 +188,7 @@ shinyServer(function(input, output, session) {
 #					pos=labelPos, xpd=TRUE, srt=xaxisLabelAngleNr, cex=input$cexAxis/10)
 				}
 			}
-			# * Add points for samples with less then mnp data points *
+			# * Add points for samples with less than mnp data points *
 			# replace "white" with "black" otherwise data points will not be visible
 			for(i in plotPoints){
 				if(input$datapointType==0 | input$plotType==1 | (input$datapointType==1 & input$showDataPoints==FALSE)){
@@ -195,52 +219,56 @@ shinyServer(function(input, output, session) {
 			
 		# *** 2) Horizontal boxplots ***
 		} else { 
+			if(input$logScale==FALSE){ myLog="" } else { myLog="x"} # log scale for y-axis?
 			if(input$plotType=='0'){
-				boxplot(plotDataM, col=myColours, ylab=input$myYlab, xlab=input$myXlab, las=1, ylim=myLim,
+				boxplot(plotDataM, col=myColours, ylab=input$myYlab, xlab=input$myXlab, las=1, ylim=myLim, log=myLog, outline=plotOutliers,
 					cex.lab=input$cexAxislabel/10, cex.axis=input$cexAxis/10, cex.main=input$cexTitle/10, 
 					main=input$myTitle, sub=input$mySubtitle, horizontal=as.numeric(input$myOrientation), frame=F, 
-					na.rm=TRUE, yaxt="n", range=myRange(), varwidth=input$myVarwidth, notch=input$myNotch) #notch=TRUE
+					na.rm=TRUE, yaxt="n", range=myRange(), varwidth=input$myVarwidth, notch=input$myNotch) #notch=TRUE, outpch=16
 				axis(2,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10)
 				# Add data points if option has been selected
 				if(input$showDataPoints==TRUE){
-					if(length(plotPoints)==0){ # all samples are boxplots --> add points for all of them
-						if(input$datapointType==0){
-							for(i in c(1:nrOfSamples)){ points(plotData[,i], rep(i, nrow(plotData)), col="black") }
-						} else { beeswarm(plotData, add=TRUE, horizontal=TRUE) }			
-					} else { # remove the ones that are already plotted as points
-						if(input$datapointType==0){
-							for(i in c(1:nrOfSamples)[-plotPoints]){ points(plotData[,i], rep(i, nrow(plotData)), col="black") }
-						} else { beeswarm(plotData, add=TRUE, horizontal=TRUE) }
-					}
+						if(input$datapointType==1){
+							beePointColors<-c()
+							for(i in 1:length(pointColors)){
+								beePointColors[i]<-rgb(t(col2rgb(pointColors[i])), max=255, alpha=255*(pointTransparency/100))
+							}
+							beeswarm(plotData, add=TRUE, horizontal=TRUE, col=beePointColors, cex=input$pointSize/10, pch=16)
+						} else {
+							jittered.points(plotData, TRUE, input$datapointType, pointColors, pointTransparency, input$pointSize/10)
+						}			
 				}
 			} else {
 				if(input$otherPlotType==0){ # Violin plot
 					vioplot(as.list(data.frame(plotDataM)), col=myColours2[1], ylim=myLim, cex.axis=input$cexAxis/10, 
-						horizontal=as.numeric(input$myOrientation), range=myRange(), border=input$violinBorder)
+						horizontal=as.numeric(input$myOrientation), border=input$violinBorder)
 					title(main=input$myTitle, ylab=input$myYlab, xlab=input$myXlab, cex.main=input$cexTitle/10, cex.lab=input$cexAxislabel/10)
 					axis(2,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10)
 
 				} else { # Bean plot
 					beanplot(data.frame(plotDataM[,notPlotPoints]), at=notPlotPoints, ylim=myLim, 
 					horizontal=as.numeric(input$myOrientation), xlim=c(0.5, ncol(plotDataM)+0.5), 
-					col=myColours2, border=input$beanBorder)
+					col=myColours2, border=input$beanBorder, overallline = myBeanplotCenter)
 					title(main=input$myTitle, ylab=input$myYlab, xlab=input$myXlab, cex.main=input$cexTitle/10, cex.lab=input$cexAxislabel/10)
 					axis(2,at=c(1:nrOfSamples), labels=FALSE, cex.axis=input$cexAxis/10) # labels=colnames(plotData)
 				}
 			}
-
-			# if there are columns with less than x data points, then add the points
-			for(i in plotPoints){
-				if(input$datapointType==0){
-					if(myColours[i]!="white"){
-						points(plotData[,i], rep(i, nrow(plotData)), col=myColours[i])
-					} else {
-						points(plotData[,i], rep(i, nrow(plotData)), col="white")				
+			# *** Add data points for columns with less than x data points ***
+			# Only if violin or bean plots are shown or points are not already added to boxplot (input$showDataPoints==FALSE)
+			if(input$plotType!='0' | input$showDataPoints==FALSE){
+				for(i in plotPoints){
+					if(input$datapointType==0){
+						if(myColours[i]!="white"){
+							points(plotData[,i], rep(i, nrow(plotData)), col=myColours[i])
+						} else {
+							points(plotData[,i], rep(i, nrow(plotData)), col="black")				
+						}
 					}
 				}
 			}
+			# *** Show number of data points for each column ***
 			if(input$showNrOfPoints==TRUE){text(y=1:ncol(dataM()), x=myLim[1], labels=boxplotStats()$n)}
-			# Add mean and CIs for mean
+			# *** Add mean and CIs for mean ***
 			if(input$addMeans==TRUE & input$plotType=='0'){
 				boxplotMeans<-apply(dataM(), 2, mean, na.rm=TRUE)
 				points(y=1:ncol(dataM()), x=boxplotMeans, pch="+", cex=2) 
@@ -257,7 +285,7 @@ shinyServer(function(input, output, session) {
 			}
 			
 		}
-		# Add grid based on option selected
+		# *** Add grid based on option selected ***
 		if(input$addGrid==0){} 
 		else if(input$addGrid==1){grid()} 
 		else if (input$addGrid==2){grid(ny=NA)}
@@ -317,16 +345,18 @@ shinyServer(function(input, output, session) {
 
 	# *** Output boxplot statistics in table below plot ***
 	output$boxplotStatsTable <- renderTable({
+		M<-rbind(as.matrix(boxplotStats()$stats[c(5,4,3,2,1),]),boxplotStats()$n)
 		if(input$addMeans){
-			M<-rbind(boxplotStats()$stats[c(5,4,3,2,1),],boxplotStats()$n)
+			#M<-rbind(boxplotStats()$stats[c(5,4,3,2,1),],boxplotStats()$n)
 			M<-rbind(M, apply(dataM(), 2, mean, na.rm=TRUE))
 			rownames(M)<-c("Upper whisker","3rd quartile","Median","1st quartile","Lower whisker", "Nr. of data points", "Mean")
 			colnames(M)<-colnames(dataM())
 		} else {
-			M<-rbind(boxplotStats()$stats[c(5,4,3,2,1),],boxplotStats()$n)
+			#M<-rbind(boxplotStats()$stats[c(5,4,3,2,1),],boxplotStats()$n)
 			rownames(M)<-c("Upper whisker","3rd quartile","Median","1st quartile","Lower whisker", "Nr. of data points")
 			colnames(M)<-colnames(dataM())
 		}
+		print(M)
 		M
 	})
 	
@@ -370,9 +400,11 @@ shinyServer(function(input, output, session) {
 				whiskers extend 1.5 times the interquartile range from the 25th and 75th percentiles; 
 				polygons represent density estimates of data and extend to extreme values.")
 			} else if (input$otherPlotType=='1') { # Bean plot
-				FL<-c("Black lines show the medians; 
+		# Display median or mean for bean plot?
+				if(input$beanPlotMedianMean==0){ myBeanplotCenter<-"median" } else { myBeanplotCenter<-"mean" }
+				FL<-paste("Black lines show the ",myBeanplotCenter,"s; 
 				white lines represent individual data points; 
-				polygons represent the estimated density of the data.")
+				polygons represent the estimated density of the data.", sep="")
 				#if(input$beanplotOverall){FL<-append(FL, c("dotted line represents overall "))}
 			}
 		} # END: other plot types	

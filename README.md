@@ -9,13 +9,13 @@ Installation
 You have two options for running shiny-boxplot:
 
 1) Launch directly from R and GitHub:
-  - Before running the app you will need to have R and RStudio installed (tested with R 3.0.2 and RStudio 0.97.449).
+  - Before running the app you will need to have R and RStudio installed (tested with R 3.2.1 and RStudio 0.99.465).
   - Launch the R console
 
 - Please run these lines in R:
   - install.packages("shiny")
   - install.packages("devtools")
-  - devtools::install_github("shiny-incubator","rstudio")
+  - devtools::install_github("rstudio/shiny-incubator")
   - install.packages("beeswarm")
   - install.packages("vioplot")
   - install.packages("beanplot")
@@ -39,10 +39,10 @@ Your web browser will open the web app.
 	- Go to your **SHINY_APP_HOME**
 	  - cd **SHINY_APP_HOME**
 	- Get the latest shiny-boxplot code from github:
-	  - wget https://github.com/jwildenhain/shiny-boxplot/archive/master.zip
+	  - wget https://github.com/VizWizard/BoxPlotR.shiny/archive/master.zip
 	  - unzip master.zip
-	  - mv shiny-boxplot-master shiny-boxplot
+	  - mv BoxPlotR.shiny-master BoxPlotR.shiny
 	- Restart shiny-server service:
 	  - sudo service shiny-server restart
 
-You should now be able to access shiny-boxplot at: http://YOURSITE:**SHINY_PORT**/shiny-boxplot
+You should now be able to access shiny-boxplot at: http://YOURSITE:**SHINY_PORT**/BoxPlotR.shiny
