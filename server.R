@@ -1,5 +1,16 @@
 options(shiny.maxRequestSize = 200*1024^2)
 
+# Pre-load example datasets so they don't hit the disk constantly
+sampleData1Cache <- read.table("Boxplot_testData2.csv", sep=",", header=TRUE, fill=TRUE, check.names=FALSE)
+sampleData2Cache <- read.table("Boxplot_testData.txt", sep=",", header=TRUE, check.names=FALSE)
+
+# Helper function to prevent redundant color parsing
+parseColours <- function(colStrings){
+  myColours <- gsub("\\s","", strsplit(colStrings,",")[[1]])
+  myColours <- gsub("0x","#", myColours)
+  return(myColours)
+}
+
 shinyServer(function(input, output, session) {
 
 	library(RColorBrewer)
@@ -18,9 +29,9 @@ shinyServer(function(input, output, session) {
 	dataM <- reactive({
 		if(input$dataInput==1){
 			if(input$sampleData==1){
-				data<-read.table("Boxplot_testData2.csv", sep=",", header=TRUE, fill=TRUE, check.names=FALSE)			
+				data <- sampleData1Cache			
 			} else {
-				data<-read.table("Boxplot_testData.txt", sep=",", header=TRUE, check.names=FALSE)
+				data <- sampleData2Cache
 			}
 		} else if(input$dataInput==2){
 			inFile <- input$upload
@@ -30,17 +41,10 @@ shinyServer(function(input, output, session) {
 			mySep<-switch(input$fileSepDF, '1'=",",'2'="\t",'3'=";", '4'="") #list("Comma"=1,"Tab"=2,"Semicolon"=3)
 				data<-read.table(inFile$datapath, sep=mySep, header=TRUE, fill=TRUE, check.names=FALSE)
 		} else { # To be looked into again - for special case when last column has empty entries in some rows
-			if(is.null(input$myData)) {return(NULL)}
-			tmp<-matrix(strsplit(input$myData, "\n")[[1]])
+			req(input$myData)
+			if(input$myData == "") {return(NULL)}
 			mySep<-switch(input$fileSepP, '1'=",",'2'="\t",'3'=";")
-			myColnames<-strsplit(tmp[1], mySep)[[1]]
-			data<-matrix(0, length(tmp)-1, length(myColnames), dimnames=list(NULL,myColnames))
-			for(i in 2:length(tmp)){
-				myRow<-as.numeric(strsplit(paste(tmp[i],mySep,mySep,sep=""), mySep)[[1]])
-				data[i-1,]<-myRow[-length(myRow)]
-			}
-			data<-data.frame(data)
-			names(data)<-myColnames
+			data <- read.table(text = input$myData, sep=mySep, header=TRUE, fill=TRUE, check.names=FALSE)
 		}
 		return(data)
 	})
@@ -68,14 +72,9 @@ shinyServer(function(input, output, session) {
 	generateBoxPlot<-function(plotData){
 		par(mar=c(5,8,4,2)) # c(bottom, left, top, right)
 
-		myColours<-gsub("\\s","", strsplit(input$myColours,",")[[1]])
-		myColours<-gsub("0x","#", myColours)
-
-		myColours2<-gsub("\\s","", strsplit(input$myOtherPlotColours,",")[[1]])
-		myColours2<-gsub("0x","#", myColours2)
-
-		pointColors<-gsub("\\s","", strsplit(input$pointColors,",")[[1]])
-		pointColors<-gsub("0x","#", pointColors)
+		myColours<-parseColours(input$myColours)
+		myColours2<-parseColours(input$myOtherPlotColours)
+		pointColors<-parseColours(input$pointColors)
 
 		pointTransparency<-100-input$pointTransparency
 
@@ -107,7 +106,7 @@ shinyServer(function(input, output, session) {
 			if(input$xlimit==""){myLim<-range(plotData,na.rm=TRUE)+c(-1,+1)} else {myLim<-as.numeric(strsplit(input$xlimit,",")[[1]])}
 		}
 		# Data point count for each sample
-		datapointCounts<-apply(!apply(plotData, 2, is.na),2,sum) # Count number of valid data points for each sample
+		datapointCounts<-colSums(!is.na(plotData)) # Count number of valid data points for each sample
 		# Check if columns with few data points should be plotted as points
 
 		# minimum number of points is 4 -> check that nrOfDataPoints is ay least 4		
@@ -199,20 +198,20 @@ shinyServer(function(input, output, session) {
 					}
 				}
 			}
-			if(input$showNrOfPoints==TRUE){text(x=1:ncol(dataM()), y=myLim[1], labels=boxplotStats()$n)}
+			if(input$showNrOfPoints==TRUE){text(x=1:nrOfSamples, y=myLim[1], labels=boxplotStats()$n)}
 			# Add mean and CIs for mean
 			if(input$addMeans==TRUE & input$plotType=='0'){
-				boxplotMeans<-apply(dataM(), 2, mean, na.rm=TRUE)
-				points(x=1:ncol(dataM()), y=boxplotMeans, pch="+", cex=2) 
+				boxplotMeans<-colMeans(plotData, na.rm=TRUE)
+				points(x=1:nrOfSamples, y=boxplotMeans, pch="+", cex=2) 
 				if(input$addMeanCI==TRUE){ 
 					# Calculate the error using the quartile function * Standard error; SE=sd/sqrt(n)
 					myQuartile<-1-((1-(as.numeric(input$meanCI)/100))/2)
-					myError<-qt(myQuartile, df=(boxplotStats()$n)-1)*(apply(dataM(), 2, sd, na.rm=TRUE)/sapply(boxplotStats()$n, sqrt))
-					for(ii in 1:ncol(dataM())) { 
+					myError<-qt(myQuartile, df=(boxplotStats()$n)-1)*(apply(plotData, 2, sd, na.rm=TRUE)/sapply(boxplotStats()$n, sqrt))
+					for(ii in 1:nrOfSamples) { 
 #						lines(y=c(ii,ii), x=c(boxplotMeans[ii]-myError[ii], boxplotMeans[ii]+myError[ii]), col="red") 
 						rect(ii-0.05, boxplotMeans[ii]-myError[ii], ii+0.05, boxplotMeans[ii]+myError[ii], col="darkgrey", border="darkgrey") 
 					}
-					points(x=1:ncol(dataM()), y=boxplotMeans, pch="+", cex=2) 
+					points(x=1:nrOfSamples, y=boxplotMeans, pch="+", cex=2) 
 				}
 			}
 			
@@ -267,20 +266,20 @@ shinyServer(function(input, output, session) {
 				}
 			}
 			# *** Show number of data points for each column ***
-			if(input$showNrOfPoints==TRUE){text(y=1:ncol(dataM()), x=myLim[1], labels=boxplotStats()$n)}
+			if(input$showNrOfPoints==TRUE){text(y=1:nrOfSamples, x=myLim[1], labels=boxplotStats()$n)}
 			# *** Add mean and CIs for mean ***
 			if(input$addMeans==TRUE & input$plotType=='0'){
-				boxplotMeans<-apply(dataM(), 2, mean, na.rm=TRUE)
-				points(y=1:ncol(dataM()), x=boxplotMeans, pch="+", cex=2) 
+				boxplotMeans<-colMeans(plotData, na.rm=TRUE)
+				points(y=1:nrOfSamples, x=boxplotMeans, pch="+", cex=2) 
 				if(input$addMeanCI==TRUE){ 
 					# Calculate the error using the quartile function * Standard error; SE=sd/sqrt(n)
 					myQuartile<-1-((1-(as.numeric(input$meanCI)/100))/2)
-					myError<-qt(myQuartile, df=(boxplotStats()$n)-1)*(apply(dataM(), 2, sd, na.rm=TRUE)/sapply(boxplotStats()$n, sqrt))
-					for(ii in 1:ncol(dataM())) { 
+					myError<-qt(myQuartile, df=(boxplotStats()$n)-1)*(apply(plotData, 2, sd, na.rm=TRUE)/sapply(boxplotStats()$n, sqrt))
+					for(ii in 1:nrOfSamples) { 
 #						lines(y=c(ii,ii), x=c(boxplotMeans[ii]-myError[ii], boxplotMeans[ii]+myError[ii]), col="red") 
 						rect(boxplotMeans[ii]-myError[ii], ii-0.05, boxplotMeans[ii]+myError[ii], ii+0.05, col="darkgrey", border="darkgrey") 
 					}
-					points(y=1:ncol(dataM()), x=boxplotMeans, pch="+", cex=2) 
+					points(y=1:nrOfSamples, x=boxplotMeans, pch="+", cex=2) 
 				}
 			}
 			
@@ -294,7 +293,6 @@ shinyServer(function(input, output, session) {
 
 	## *** Data in table ***
 	output$filetable <- renderTable({
-		print(nrow(dataM()))
 		if(nrow(dataM())<500){
 			return(dataM())
 		} else {return(dataM()[1:100,])}
@@ -302,7 +300,6 @@ shinyServer(function(input, output, session) {
 
 	# *** Boxplot (using 'generateBoxPlot'-function) ***
 	output$boxPlot <- renderPlot({
-		print(class(dataM()))
 		generateBoxPlot(dataM())
 	}, height = heightSize, width = widthSize)
 	
@@ -347,18 +344,15 @@ shinyServer(function(input, output, session) {
 	output$boxplotStatsTable <- renderTable({
 		M<-rbind(as.matrix(boxplotStats()$stats[c(5,4,3,2,1),]),boxplotStats()$n)
 		if(input$addMeans){
-			#M<-rbind(boxplotStats()$stats[c(5,4,3,2,1),],boxplotStats()$n)
-			M<-rbind(M, apply(dataM(), 2, mean, na.rm=TRUE))
+			M<-rbind(M, colMeans(dataM(), na.rm=TRUE))
 			rownames(M)<-c("Upper whisker","3rd quartile","Median","1st quartile","Lower whisker", "Nr. of data points", "Mean")
 			colnames(M)<-colnames(dataM())
 		} else {
-			#M<-rbind(boxplotStats()$stats[c(5,4,3,2,1),],boxplotStats()$n)
 			rownames(M)<-c("Upper whisker","3rd quartile","Median","1st quartile","Lower whisker", "Nr. of data points")
 			colnames(M)<-colnames(dataM())
 		}
-		print(M)
 		M
-	})
+	}, rownames = TRUE)
 	
 	# *** Print figure legend ***
 	output$FigureLegend <- renderPrint({

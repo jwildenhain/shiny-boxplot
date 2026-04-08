@@ -1,18 +1,22 @@
 
-shinyUI(pageWithSidebar(
-
-	headerPanel("BoxPlotR: a web-tool for generation of box plots",
-		tags$head(tags$style(type="text/css", "label.radio { display: inline-block; }", ".radio input[type=\"radio\"] { float: none; }"),
-		tags$style(type="text/css", "select { max-width: 200px; }"),
-		tags$style(type="text/css", "textarea { max-width: 185px; }"),
-		tags$style(type="text/css", ".jslider { max-width: 200px; }"),
-		tags$style(type='text/css', ".well { max-width: 330px; }"),
-		tags$style(type='text/css', ".span4 { max-width: 330px; }")) 
+shinyUI(fluidPage(
+	theme = shinythemes::shinytheme("flatly"),
+	titlePanel("BoxPlotR: a web-tool for generation of box plots"),
+	tags$head(
+		tags$style(HTML("
+			label.radio { display: inline-block; }
+			.radio input[type=\"radio\"] { float: none; }
+			select { max-width: 200px; }
+			textarea { max-width: 185px; }
+			.jslider { max-width: 200px; }
+			.well { max-width: 330px; }
+			.span4 { max-width: 330px; }
+		"))
 	),
-  
-	sidebarPanel(
-		conditionalPanel(condition="input.tabs1=='About'",
-			h4("Introduction")
+	sidebarLayout(
+		sidebarPanel(
+			conditionalPanel(condition="input.tabs1=='About'",
+				h4("Introduction")
 		),
 		conditionalPanel(condition="input.tabs1=='Data upload'",
 			h4("Enter data"),
@@ -247,6 +251,7 @@ shinyUI(pageWithSidebar(
 			id="tabs1"
 		)
 	)
+  )
 ))
 
 
