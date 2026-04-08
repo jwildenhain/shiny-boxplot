@@ -1,16 +1,55 @@
 
 shinyUI(fluidPage(
-	theme = shinythemes::shinytheme("flatly"),
 	titlePanel("BoxPlotR: a web-tool for generation of box plots"),
 	tags$head(
 		tags$style(HTML("
+			@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+			body, h1, h2, h3, h4, h5, h6, .shiny-text-output, label { font-family: 'Inter', sans-serif !important; }
+			body { background-color: #f3f4f6; }
 			label.radio { display: inline-block; }
 			.radio input[type=\"radio\"] { float: none; }
-			select { max-width: 200px; }
-			textarea { max-width: 185px; }
+			select { max-width: 200px; border-radius: 6px; border: 1px solid #d1d5db; padding: 4px; }
+			textarea { max-width: 185px; border-radius: 6px; border: 1px solid #d1d5db; }
 			.jslider { max-width: 200px; }
-			.well { max-width: 330px; }
+			
+			/* Glassmorphism Sidebar */
+			.well {
+				max-width: 330px;
+				background: rgba(255, 255, 255, 0.6) !important;
+				backdrop-filter: blur(12px) !important;
+				-webkit-backdrop-filter: blur(12px) !important;
+				border: 1px solid rgba(255, 255, 255, 0.6) !important;
+				border-radius: 16px !important;
+				box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05) !important;
+			}
 			.span4 { max-width: 330px; }
+
+			/* Accent Colors - Ocean Blue */
+			.nav-tabs > li.active > a, .nav-tabs > li.active > a:focus, .nav-tabs > li.active > a:hover {
+				color: #fff !important; background-color: #0c4a6e !important;
+				border-radius: 8px 8px 0 0; border: none !important;
+			}
+			.nav-tabs > li > a { color: #475569 !important; font-weight: 500; }
+			.btn-default {
+				background-color: #e0f2fe !important; color: #0369a1 !important;
+				border: 1px solid #bae6fd !important; border-radius: 6px !important;
+				transition: all 0.2s ease; font-weight: 600; margin-bottom: 5px;
+			}
+			.btn-default:hover {
+				background-color: #0ea5e9 !important; color: white !important;
+				box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3) !important;
+			}
+			
+			/* Card Layout for Plots */
+			.plot-card {
+				background: #ffffff; border-radius: 16px; padding: 20px;
+				box-shadow: 0 10px 25px rgba(0,0,0,0.06); margin-top: 15px; margin-bottom: 25px; border: 1px solid #e5e7eb;
+			}
+			.table-card {
+				background: #ffffff; border-radius: 12px; padding: 15px;
+				box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;
+			}
+			.controls-row { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
 		"))
 	),
 	sidebarLayout(
@@ -166,7 +205,7 @@ shinyUI(fluidPage(
 				boxes. These are defined as +/-1.58*<a href="http://en.wikipedia.org/wiki/Interquartile_range">IQR</a>/sqrt(n) which gives roughly 95% confidence that two medians are different. It is also possible to define
 				the whiskers based on the ideas of Spear and Tukey. Additional options of data visualization (violin and bean plots) reveal more information
 				about the underlying data distribution. Plots can be labeled, customized (colors, dimensions, orientation) and exported as eps, pdf and svg files.</p>
-				<p>BoxPlotR code can be run locally via <a href="https://github.com/VizWizard/BoxPlotR.shiny/blob/master/README.md">GitHub</a>. You can also download and install it as a virtual machine (see <a href="https://github.com/VizWizard/BoxPlotR.shiny/blob/master/README.md">GitHub</a> and FAQs for details). </p>'),
+				<p>BoxPlotR code can be run locally via <a href="https://github.com/jwildenhain/BoxPlotR.shiny/blob/master/README.md">GitHub</a>. You can also download and install it as a virtual machine (see <a href="https://github.com/jwildenhain/BoxPlotR.shiny/blob/master/README.md">GitHub</a> and FAQs for details). </p>'),
 
 				h5("Software references"),
 				HTML('<p>R Development Core Team. <i><a href="http://www.r-project.org/">R</a>:  A Language and Environment for Statistical Computing.</i> R Foundation for Statistical Computing, Vienna (2013) <br>
@@ -189,11 +228,20 @@ shinyUI(fluidPage(
 				a("shiny package from RStudio", href="http://www.rstudio.com/shiny/"), ".")
 			),
 			# Boxplot tab
-			tabPanel("Data visualization", downloadButton("downloadPlotEPS", "Download eps-file"),
-				downloadButton("downloadPlotPDF", "Download pdf-file"),
-				downloadButton("downloadPlotSVG", "Download svg-file"),
-				plotOutput("boxPlot", height='100%', width='100%'),
-				h4("Box plot statistics"), tableOutput("boxplotStatsTable"),
+			tabPanel("Data visualization", 
+				div(class="controls-row",
+					downloadButton("downloadPlotEPS", "Download eps-file"),
+					downloadButton("downloadPlotPDF", "Download pdf-file"),
+					downloadButton("downloadPlotSVG", "Download svg-file")
+				),
+				div(class="plot-card",
+					plotOutput("boxPlot", height='100%', width='100%')
+				),
+				div(class="table-card",
+					h4("Box plot statistics"), 
+					tableOutput("boxplotStatsTable")
+				),
+				br(),
 				h6("This application was created by the ", a("Tyers", href="http://tyers.iric.ca/"), " and ", a("Rappsilber", href="http://rappsilberlab.org/"),
 				" labs. Please send bugs and feature requests to Michaela Spitzer (michaela.spitzer(at)gmail.com) and Jan Wildenhain (jan.wildenhain(at)gmail.com). This application uses the ",
 				a("shiny package from RStudio", href="http://www.rstudio.com/shiny/"), ".")
@@ -208,6 +256,8 @@ shinyUI(fluidPage(
 			),
 			# News
 			tabPanel("News",
+				h5("April 8, 2026"),
+				HTML('<p>The shiny server backend has been updated. The number of concurrent sessions has been limited to 15 and the session idle timeout set to 10 minutes. We are currently reworking the code to support the latest R and shiny versions, plus preparing a system upgrade of the server.</p>'),
                 h5("January 17, 2021"),
                 HTML('<p>There are several recent updates. The jitter of points is now consistent for all samples. When
                 data points are added to the plot, the size and transparence of the points can now be modified with
@@ -232,19 +282,8 @@ shinyUI(fluidPage(
 				In Adobe Illustrator you will also need to use the 'release compound path' command. For PDF 
 				files you should 'release clipping mask'. SVG import appears to have problems in Adobe Illustrator 
 				and Corel Draw and should be avoided. EPS, PDF and SVG import all work with Inkscape http://www.inkscape.org/."),
-				h5("Q: I would like to install BoxPlotR as a virtual machine."), 
-				HTML('<p>A: Please download the virtual machine from http://tyerslab.bio.ed.ac.uk/download/shiny.boxplot.7z (1.1GB). 
-				Unzip the file using <a href="http://www.7-zip.org/">7zip</a> or equivalent. The virtual machine is available in the open 
-				virtualization format (OVF) and you can use this file with <a href="https://www.virtualbox.org/">vbox</a> and 
-				<a href="https://my.vmware.com/web/vmware/free#desktop_end_user_computing/vmware_player/6_0">vmware player</a>. 
-				One easy way to use the server is to set the virtual host network environment to NAT. After importing the virtual machine you can 
-				start the server and login as user shiny  with password pk635153Y6jx89r. On the command line use the command ifconfg and record the 
-				IP address of the virtual server. Now going back to the virtual host network environment change the advanced settings of the NAT and 
-				activate port forwarding for the guest network ip address (shiny server) using port 80 to the host ip address using for example port 8080. 
-				Now you should be able to access the shiny server in a browser on port 127.0.0.1:8080 or your localhost:8080.
-				If you are not familiar with the software packages there are detailed examples for 
-				<a href="http://www.howtogeek.com/122641/how-to-forward-ports-to-a-virtual-machine-and-use-it-as-a-server/">vbox</a> and 
-				<a href="http://blog.fardad.com/2012/06/vmware-player-and-custom-nat-port-map.html">vmware</a>.</p>')
+				h5("Q: I would like to run BoxPlotR locally in an isolated environment."), 
+				HTML('<p>A: We provide a pre-configured Docker image that automatically installs and configures the environment. First, ensure you have <a href="https://docs.docker.com/get-docker/">Docker installed</a>. Then, clone the repository and run the following terminal commands inside the repository directory: <br><br> <code>docker build -t boxplotr .</code> <br> <code>docker run -d -p 3838:3838 boxplotr</code> <br><br> You can then access the application by navigating your web browser to <strong>http://localhost:3838</strong>.</p>')
 #				h5("Q:"), 
 #				p("A:")
 			),			
