@@ -2,8 +2,7 @@
 FROM rocker/shiny:latest
 
 
-# Install required R packages
-RUN R -e "install.packages(c('beeswarm', 'vioplot', 'beanplot', 'RColorBrewer'), repos='https://cloud.r-project.org/')"
+RUN R -e "install.packages(c('beeswarm', 'vioplot', 'beanplot', 'RColorBrewer', 'readxl', 'sm'), repos='https://cloud.r-project.org/')"
 
 # Remove default Shiny apps
 RUN rm -rf /srv/shiny-server/*

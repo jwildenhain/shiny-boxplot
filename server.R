@@ -1,424 +1,675 @@
-options(shiny.maxRequestSize = 200*1024^2)
+options(shiny.maxRequestSize = 200 * 1024^2)
 
 # Pre-load example datasets so they don't hit the disk constantly
-sampleData1Cache <- read.table("Boxplot_testData2.csv", sep=",", header=TRUE, fill=TRUE, check.names=FALSE)
-sampleData2Cache <- read.table("Boxplot_testData.txt", sep=",", header=TRUE, check.names=FALSE)
+sample_data_1_cache <- read.table(
+  "Boxplot_testData2.csv",
+  sep = ",", header = TRUE, fill = TRUE,
+  check.names = FALSE
+)
+sample_data_2_cache <- read.table(
+  "Boxplot_testData.txt",
+  sep = ",", header = TRUE,
+  check.names = FALSE
+)
+sample_data_3_cache <- as.data.frame(
+  readxl::read_excel("Boxplot_testData3.xlsx")
+)
 
 # Helper function to prevent redundant color parsing
-parseColours <- function(colStrings){
-  myColours <- gsub("\\s","", strsplit(colStrings,",")[[1]])
-  myColours <- gsub("0x","#", myColours)
-  return(myColours)
+parse_colours <- function(col_strings) {
+  my_colours <- gsub("\\s", "", strsplit(col_strings, ",")[[1]])
+  my_colours <- gsub("0x", "#", my_colours)
+  return(my_colours)
 }
 
 shinyServer(function(input, output, session) {
+  library(RColorBrewer)
+  library(beeswarm)
+  library(vioplot)
+  source("MyVioplot.R")
+  library(beanplot)
+  library(readxl)
+  source("boxplot_stats_Function.R")
+  source("BoxPlotR_functions.R")
 
-	library(RColorBrewer)
-	library(beeswarm)
-	library(vioplot)
-	source("MyVioplot.R")
-	library(beanplot)	 
-	source("boxplot_stats_Function.R")
-	source("BoxPlotR_functions.R")	
-	
-	observe({
-		if (input$clearText_button == 0) return()
-		isolate({ updateTextInput(session, "myData", label = ",", value = "") })
-	})
-	# *** Read in data matrix ***
-	dataM <- reactive({
-		if(input$dataInput==1){
-			if(input$sampleData==1){
-				data <- sampleData1Cache			
-			} else {
-				data <- sampleData2Cache
-			}
-		} else if(input$dataInput==2){
-			inFile <- input$upload
-			# Avoid error message while file is not uploaded yet
-			if (is.null(input$upload))  {return(NULL)}
-			# Get the separator
-			mySep<-switch(input$fileSepDF, '1'=",",'2'="\t",'3'=";", '4'="") #list("Comma"=1,"Tab"=2,"Semicolon"=3)
-				data<-read.table(inFile$datapath, sep=mySep, header=TRUE, fill=TRUE, check.names=FALSE)
-		} else { # To be looked into again - for special case when last column has empty entries in some rows
-			if(is.null(input$myData) || input$myData == "") {return(NULL)}
-			mySep<-switch(input$fileSepP, '1'=",",'2'="\t",'3'=";")
-			data <- read.table(text = input$myData, sep=mySep, header=TRUE, fill=TRUE, check.names=FALSE)
-		}
-		return(data)
-	})
-	
-	# *** The plot dimensions ***
-	heightSize <- reactive ({ input$myHeight })
-	widthSize <- reactive ({ input$myWidth })
+  observe({
+    if (input$clearText_button == 0) {
+      return()
+    }
+    isolate({
+      updateTextInput(session, "myData", label = ",", value = "")
+    })
+  })
 
-	# *** Determine extent of whisker range ***
-	# whiskerDefinition 0 - Tukey (default), 1 - Spear (min/max, range=0), 2 - Altman (5% and 95% quantiles)
-	# radioButtons("whiskerType", "", list("Tukey"=0, "Spear"=1, "Altman"=2)),
-	myRange <- reactive({
-		if(input$whiskerType==0){myRange<-c(-1.5)} 
-		else if(input$whiskerType==1){myRange<-c(0)} 
-		else if (input$whiskerType==2){myRange<-c(5)}
-		return(myRange)
-	})
-	
-	# *** Get boxplot statistics ***
-	boxplotStats <- reactive({
-		if(is.null(dataM())) return(NULL)
-		return(boxplot(dataM(), na.rm=TRUE, range=myRange(), plot=FALSE))
-	})
-	
-	# *** Generate the box plot ***
-	generateBoxPlot<-function(plotData){
-		par(mar=c(5,8,4,2)) # c(bottom, left, top, right)
+  # *** Read in data matrix ***
+  data_m <- reactive({
+    if (input$dataInput == 1) {
+      if (input$sampleData == 1) {
+        data <- sample_data_1_cache
+      } else if (input$sampleData == 2) {
+        data <- sample_data_2_cache
+      } else {
+        data <- sample_data_3_cache
+      }
+    } else if (input$dataInput == 2) {
+      in_file <- input$upload
+      # Avoid error message while file is not uploaded yet
+      if (is.null(input$upload)) {
+        return(NULL)
+      }
+      # Get the separator and extension
+      ext <- tolower(tools::file_ext(in_file$name))
 
-		myColours<-parseColours(input$myColours)
-		myColours2<-parseColours(input$myOtherPlotColours)
-		pointColors<-parseColours(input$pointColors)
+      if (ext %in% c("xls", "xlsx")) {
+        data <- as.data.frame(readxl::read_excel(in_file$datapath))
+      } else {
+        my_sep <- switch(input$fileSepDF,
+          "1" = ",",
+          "2" = "\t",
+          "3" = ";",
+          "4" = ""
+        )
+        data <- read.table(
+          in_file$datapath,
+          sep = my_sep, header = TRUE, fill = TRUE,
+          check.names = FALSE
+        )
+      }
+    } else {
+      # For special case when last column has empty entries in some rows
+      if (is.null(input$myData) || input$myData == "") {
+        return(NULL)
+      }
+      my_sep <- switch(input$fileSepP,
+        "1" = ",",
+        "2" = "\t",
+        "3" = ";"
+      )
+      data <- read.table(
+        text = input$myData, sep = my_sep, header = TRUE, fill = TRUE,
+        check.names = FALSE
+      )
+    }
+    return(data)
+  })
 
-		pointTransparency<-100-input$pointTransparency
+  # *** The plot dimensions ***
+  height_size <- reactive({
+    input$myHeight
+  })
+  width_size <- reactive({
+    input$myWidth
+  })
 
-		nrOfSamples<-ncol(plotData)
-		# Display median or mean for bean plot?
-		if(input$beanPlotMedianMean==0){ myBeanplotCenter<-"median" } else { myBeanplotCenter<-"mean" }
-		# Generate colour vector
-		if(length(myColours)==1){
-			myColours<-rep(myColours, nrOfSamples)
-		} else if(length(myColours) < nrOfSamples){
-			myColours<-rep(myColours,times=(round(nrOfSamples/length(myColours)))+1)
-		}
-		
-		# Generate colour vector for points
-		if(length(pointColors)==1){
-			pointColors<-rep(pointColors, nrOfSamples)
-		} else if(length(pointColors) < nrOfSamples){
-			pointColors<-rep(pointColors,times=(round(nrOfSamples/length(pointColors)))+1)
-		}
+  # *** Determine extent of whisker range ***
+  # whiskerDefinition 0 - Tukey (default), 1 - Spear (min/max, range=0),
+  # 2 - Altman (5% and 95% quantiles)
+  my_range <- reactive({
+    if (input$whiskerType == 0) {
+      my_range <- c(-1.5)
+    } else if (input$whiskerType == 1) {
+      my_range <- c(0)
+    } else if (input$whiskerType == 2) {
+      my_range <- c(5)
+    }
+    return(my_range)
+  })
 
-		plotPoints<-c() # vector for indices of samples that are to be plotted as points, not as boxplots
-		notPlotPoints <- seq(1:nrOfSamples) # samples to plot as boxes/violins/beans
-		plotDataM<-plotData
-		# Determine plot range
-		myBuffer<-max(abs(range(plotData,na.rm=TRUE)))*0.1 # add 10% of data maximum at each end of y/x axis
-		if(as.numeric(input$myOrientation)==0){		
-			if(input$ylimit==""){myLim<-range(plotData,na.rm=TRUE)+c(-1,+1)} else {myLim<-as.numeric(strsplit(input$ylimit,",")[[1]])}
-		} else {
-			if(input$xlimit==""){myLim<-range(plotData,na.rm=TRUE)+c(-1,+1)} else {myLim<-as.numeric(strsplit(input$xlimit,",")[[1]])}
-		}
-		# Data point count for each sample
-		datapointCounts<-colSums(!is.na(plotData)) # Count number of valid data points for each sample
-		# Check if columns with few data points should be plotted as points
+  # *** Get boxplot statistics ***
+  boxplot_stats <- reactive({
+    if (is.null(data_m())) {
+      return(NULL)
+    }
+    return(boxplot(data_m(), na.rm = TRUE, range = my_range(), plot = FALSE))
+  })
 
-		# minimum number of points is 4 -> check that nrOfDataPoints is ay least 4		
-		mnp<-max(4,input$nrOfDataPoints)
-		
-		if(input$plotDataPoints==TRUE){
-			#toPlot <- seq(1:ncol(plotData))[datapointCounts>=input$nrOfDataPoints] # samples to barplot
-			plotPoints <- seq(1:nrOfSamples)[datapointCounts<mnp] # samples to plot as points
-			notPlotPoints <- seq(1:nrOfSamples)[datapointCounts>=mnp] # samples to plot as boxes/violins/beans
-		}
+  # *** Helper function for stats table ***
+  get_stats_matrix <- function(data, stats, add_means) {
+    stats_matrix <- rbind(
+      as.matrix(stats$stats[c(5, 4, 3, 2, 1), ]),
+      stats$n
+    )
 
-		# Generate plotDataM matrix such that columns that should be plotted as points are filled with data points 
-		# outside of visible plot area to 'reserve' spot for points
-		for(i in plotPoints){
-			plotDataM[,i]<-c(rep(myLim[2]+10, nrow(plotData)-1),myLim[2]+20)
-		}
+    if (add_means) {
+      stats_matrix <- rbind(stats_matrix, colMeans(data, na.rm = TRUE))
+      rownames(stats_matrix) <- c(
+        "Upper whisker", "3rd quartile", "Median", "1st quartile",
+        "Lower whisker", "Nr. of data points", "Mean"
+      )
+    } else {
+      rownames(stats_matrix) <- c(
+        "Upper whisker", "3rd quartile", "Median", "1st quartile",
+        "Lower whisker", "Nr. of data points"
+      )
+    }
+    colnames(stats_matrix) <- colnames(data)
+    return(stats_matrix)
+  }
 
-		# Angle the sample names
-		if(input$xaxisLabelAngle){ 
-			xaxisLabelAngleNr<-45
-			labelPos<-2
-		} else { 
-			xaxisLabelAngleNr<-0
-			labelPos<-1
-		}
+  # *** Helper function for figure legend ***
+  generate_figure_legend <- function(stats, plot_type, other_plot_type,
+                                     whisker_type, add_means, add_mean_ci,
+                                     mean_ci_val, my_varwidth,
+                                     bean_plot_center_type) {
+    fl <- "Center lines show the medians; "
 
-		par(mar=c(12.1, 11.1, 4.1, 2.1))
-		
-		if(input$showDataPoints==TRUE) {
-			plotOutliers=FALSE
-		} else {
-			plotOutliers=TRUE
-		}
-		# *** 1) Vertical boxplots ***
-		par(las=1)
-		if(as.numeric(input$myOrientation)==0){
-			if(input$logScale==FALSE){ myLog="" } else { myLog="y"} # log scale for y-axis?
-			# *** Generate boxplot ***
-			if(input$plotType=='0'){
-				boxplot(plotDataM, col=myColours, ylab=input$myYlab, xlab=input$myXlab, ylim=myLim, log=myLog, outline=plotOutliers,
-					cex.lab=input$cexAxislabel/10, cex.axis=input$cexAxis/10, cex.main=input$cexTitle/10, 
-					main=input$myTitle, sub=input$mySubtitle, horizontal=as.numeric(input$myOrientation), frame=F, 
-					na.rm=TRUE, xaxt="n", range=myRange(), varwidth=input$myVarwidth, notch=input$myNotch) #notch=TRUE, outpch=16
-				axis(1,at=c(1:nrOfSamples), labels=FALSE, cex.axis=input$cexAxis/10) #
-#				mtext(text=colnames(plotData), side=1, at=c(1:nrOfSamples), xpd=TRUE, srt=xaxisLabelAngleNr, cex=input$cexAxis/10)
-				text(x=c(1:nrOfSamples), y=rep(myLim[1]-(myLim[2]-myLim[1])/10,nrOfSamples), labels=colnames(plotData), pos=labelPos, xpd=TRUE, srt=xaxisLabelAngleNr, cex=input$cexAxis/10)
+    if (plot_type == "0") { # Boxplot
+      fl <- paste0(
+        fl,
+        "box limits indicate the 25th and 75th percentiles ",
+        "as determined by R software"
+      )
 
-				# *** Add data points to plot if selected ***
-				if(input$showDataPoints==TRUE){
-						if(input$datapointType==1){
-							beePointColors<-c()
-							for(i in 1:length(pointColors)){
-								beePointColors[i]<-rgb(t(col2rgb(pointColors[i])), max=255, alpha=255*(pointTransparency/100))
-							}
-							beeswarm(plotData, add=TRUE, col=beePointColors, cex=input$pointSize/10, pch=16)
-						} else { 
-							jittered.points(plotData, FALSE, input$datapointType, pointColors, pointTransparency, input$pointSize/10)
-						}			
-				}
-			} else { # *** Generate violin or bean plot ***
-				if(input$otherPlotType==0){ # Violin plot
-					vioplot(as.list(data.frame(plotDataM)), col=myColours2, ylim=myLim, cex.axis=input$cexAxis/10, 
-						horizontal=as.numeric(input$myOrientation), border=input$violinBorder)
-					title(main=input$myTitle, ylab=input$myYlab, xlab=input$myXlab, cex.main=input$cexTitle/10, cex.lab=input$cexAxislabel/10)
-#					axis(1,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10, sub=input$mySubtitle)
-					axis(1,at=c(1:nrOfSamples), labels=FALSE, cex.axis=input$cexAxis/10) #
-					text(x=c(1:nrOfSamples), y=rep(myLim[1]-3,nrOfSamples), labels=colnames(plotData), 
-						pos=labelPos, xpd=TRUE, srt=xaxisLabelAngleNr, cex=input$cexAxis/10)
+      if (whisker_type == 0) {
+        fl <- paste0(
+          fl,
+          "; whiskers extend 1.5 times the interquartile range ",
+          "from the 25th and 75th percentiles, outliers are ",
+          "represented by dots"
+        )
+      } else if (whisker_type == 1) {
+        fl <- paste0(fl, "; whiskers extend to minimum and maximum values")
+      } else {
+        fl <- paste0(
+          fl,
+          "; whiskers extend to 5th and 95th percentiles, ",
+          "outliers are represented by dots"
+        )
+      }
 
-				} else {
-					beanplot(data.frame(plotDataM[,notPlotPoints]), at=notPlotPoints, ylim=myLim, 
-						horizontal=as.numeric(input$myOrientation), xlim=c(0.5, ncol(plotDataM)+0.5), 
-						col=myColours2, border=input$beanBorder, overallline = myBeanplotCenter)
-					title(main=input$myTitle, ylab=input$myYlab, xlab=input$myXlab, cex.main=input$cexTitle/10, cex.lab=input$cexAxislabel/10)
-	#				axis(1,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10)				
-					axis(1,at=c(1:nrOfSamples), labels=FALSE, cex.axis=input$cexAxis/10) #
-#					text(x=c(1:nrOfSamples), y=rep(myLim[1]-3,nrOfSamples), labels=colnames(plotData), 
-#					pos=labelPos, xpd=TRUE, srt=xaxisLabelAngleNr, cex=input$cexAxis/10)
-				}
-			}
-			# * Add points for samples with less than mnp data points *
-			# replace "white" with "black" otherwise data points will not be visible
-			for(i in plotPoints){
-				if(input$datapointType==0 | input$plotType==1 | (input$datapointType==1 & input$showDataPoints==FALSE)){
-					if(myColours[i]!="white"){
-						points(rep(i, nrow(plotData)), plotData[,i], col=myColours[i])
-					} else {
-						points(rep(i, nrow(plotData)), plotData[,i], col="black")				
-					}
-				}
-			}
-			if(input$showNrOfPoints==TRUE){text(x=1:nrOfSamples, y=myLim[1], labels=boxplotStats()$n)}
-			# Add mean and CIs for mean
-			if(input$addMeans==TRUE & input$plotType=='0'){
-				boxplotMeans<-colMeans(plotData, na.rm=TRUE)
-				points(x=1:nrOfSamples, y=boxplotMeans, pch="+", cex=2) 
-				if(input$addMeanCI==TRUE){ 
-					# Calculate the error using the quartile function * Standard error; SE=sd/sqrt(n)
-					myQuartile<-1-((1-(as.numeric(input$meanCI)/100))/2)
-					myError<-qt(myQuartile, df=(boxplotStats()$n)-1)*(apply(plotData, 2, sd, na.rm=TRUE)/sapply(boxplotStats()$n, sqrt))
-					for(ii in 1:nrOfSamples) { 
-#						lines(y=c(ii,ii), x=c(boxplotMeans[ii]-myError[ii], boxplotMeans[ii]+myError[ii]), col="red") 
-						rect(ii-0.05, boxplotMeans[ii]-myError[ii], ii+0.05, boxplotMeans[ii]+myError[ii], col="darkgrey", border="darkgrey") 
-					}
-					points(x=1:nrOfSamples, y=boxplotMeans, pch="+", cex=2) 
-				}
-			}
-			
-			
-		# *** 2) Horizontal boxplots ***
-		} else { 
-			if(input$logScale==FALSE){ myLog="" } else { myLog="x"} # log scale for y-axis?
-			if(input$plotType=='0'){
-				boxplot(plotDataM, col=myColours, ylab=input$myYlab, xlab=input$myXlab, las=1, ylim=myLim, log=myLog, outline=plotOutliers,
-					cex.lab=input$cexAxislabel/10, cex.axis=input$cexAxis/10, cex.main=input$cexTitle/10, 
-					main=input$myTitle, sub=input$mySubtitle, horizontal=as.numeric(input$myOrientation), frame=F, 
-					na.rm=TRUE, yaxt="n", range=myRange(), varwidth=input$myVarwidth, notch=input$myNotch) #notch=TRUE, outpch=16
-				axis(2,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10)
-				# Add data points if option has been selected
-				if(input$showDataPoints==TRUE){
-						if(input$datapointType==1){
-							beePointColors<-c()
-							for(i in 1:length(pointColors)){
-								beePointColors[i]<-rgb(t(col2rgb(pointColors[i])), max=255, alpha=255*(pointTransparency/100))
-							}
-							beeswarm(plotData, add=TRUE, horizontal=TRUE, col=beePointColors, cex=input$pointSize/10, pch=16)
-						} else {
-							jittered.points(plotData, TRUE, input$datapointType, pointColors, pointTransparency, input$pointSize/10)
-						}			
-				}
-			} else {
-				if(input$otherPlotType==0){ # Violin plot
-					vioplot(as.list(data.frame(plotDataM)), col=myColours2[1], ylim=myLim, cex.axis=input$cexAxis/10, 
-						horizontal=as.numeric(input$myOrientation), border=input$violinBorder)
-					title(main=input$myTitle, ylab=input$myYlab, xlab=input$myXlab, cex.main=input$cexTitle/10, cex.lab=input$cexAxislabel/10)
-					axis(2,at=c(1:nrOfSamples), labels=colnames(plotData), cex.axis=input$cexAxis/10)
+      if (add_means) {
+        fl <- paste0(fl, "; crosses represent sample means")
+        if (add_mean_ci) {
+          fl <- paste0(
+            fl, "; bars indicate ", mean_ci_val,
+            "% confidence intervals of the means"
+          )
+        }
+      }
 
-				} else { # Bean plot
-					beanplot(data.frame(plotDataM[,notPlotPoints]), at=notPlotPoints, ylim=myLim, 
-					horizontal=as.numeric(input$myOrientation), xlim=c(0.5, ncol(plotDataM)+0.5), 
-					col=myColours2, border=input$beanBorder, overallline = myBeanplotCenter)
-					title(main=input$myTitle, ylab=input$myYlab, xlab=input$myXlab, cex.main=input$cexTitle/10, cex.lab=input$cexAxislabel/10)
-					axis(2,at=c(1:nrOfSamples), labels=FALSE, cex.axis=input$cexAxis/10) # labels=colnames(plotData)
-				}
-			}
-			# *** Add data points for columns with less than x data points ***
-			# Only if violin or bean plots are shown or points are not already added to boxplot (input$showDataPoints==FALSE)
-			if(input$plotType!='0' | input$showDataPoints==FALSE){
-				for(i in plotPoints){
-					if(input$datapointType==0){
-						if(myColours[i]!="white"){
-							points(plotData[,i], rep(i, nrow(plotData)), col=myColours[i])
-						} else {
-							points(plotData[,i], rep(i, nrow(plotData)), col="black")				
-						}
-					}
-				}
-			}
-			# *** Show number of data points for each column ***
-			if(input$showNrOfPoints==TRUE){text(y=1:nrOfSamples, x=myLim[1], labels=boxplotStats()$n)}
-			# *** Add mean and CIs for mean ***
-			if(input$addMeans==TRUE & input$plotType=='0'){
-				boxplotMeans<-colMeans(plotData, na.rm=TRUE)
-				points(y=1:nrOfSamples, x=boxplotMeans, pch="+", cex=2) 
-				if(input$addMeanCI==TRUE){ 
-					# Calculate the error using the quartile function * Standard error; SE=sd/sqrt(n)
-					myQuartile<-1-((1-(as.numeric(input$meanCI)/100))/2)
-					myError<-qt(myQuartile, df=(boxplotStats()$n)-1)*(apply(plotData, 2, sd, na.rm=TRUE)/sapply(boxplotStats()$n, sqrt))
-					for(ii in 1:nrOfSamples) { 
-#						lines(y=c(ii,ii), x=c(boxplotMeans[ii]-myError[ii], boxplotMeans[ii]+myError[ii]), col="red") 
-						rect(boxplotMeans[ii]-myError[ii], ii-0.05, boxplotMeans[ii]+myError[ii], ii+0.05, col="darkgrey", border="darkgrey") 
-					}
-					points(y=1:nrOfSamples, x=boxplotMeans, pch="+", cex=2) 
-				}
-			}
-			
-		}
-		# *** Add grid based on option selected ***
-		if(input$addGrid==0){} 
-		else if(input$addGrid==1){grid()} 
-		else if (input$addGrid==2){grid(ny=NA)}
-		else if (input$addGrid==3){grid(NA, ny=NULL)}	
-	}
+      if (my_varwidth) {
+        fl <- paste0(
+          fl, "; width of the boxes is proportional to the square root ",
+          "of the sample size"
+        )
+      }
+    } else {
+      if (other_plot_type == "0") { # Violin plot
+        fl <- paste0(
+          "White circles show the medians; box limits indicate the 25th ",
+          "and 75th percentiles; whiskers extend 1.5 times the interquartile ",
+          "range; polygons represent density estimates."
+        )
+      } else { # Bean plot
+        center_label <- if (bean_plot_center_type == 0) "median" else "mean"
+        fl <- paste0(
+          "Black lines show the ", center_label,
+          "s; white lines represent individual data points; ",
+          "polygons represent density estimates."
+        )
+      }
+    }
 
-	## *** Data in table ***
-	output$filetable <- renderTable({
-		if(is.null(dataM())) return(NULL)
-		if(nrow(dataM())<500){
-			return(dataM())
-		} else {return(dataM()[1:100,])}
-	})
+    fl <- paste0(
+      fl, ". n = ",
+      paste(stats$n, collapse = ", "),
+      " sample points."
+    )
+    return(fl)
+  }
 
-	# *** Boxplot (using 'generateBoxPlot'-function) ***
-	output$boxPlot <- renderPlot({
-		if(is.null(dataM())) return(NULL)
-		generateBoxPlot(dataM())
-	}, height = heightSize, width = widthSize)
-	
-	## *** Download EPS file ***
-	output$downloadPlotEPS <- downloadHandler(
-		filename <- function() { paste('Boxplot.eps') },
-		content <- function(file) {
-			postscript(file, horizontal = FALSE, onefile = FALSE, paper = "special", width = input$myWidth/72, height = input$myHeight/72)
-			## ---------------
-			generateBoxPlot(dataM())
-			## ---------------
-			dev.off()
-		},
-		contentType = 'application/postscript'
-	)
-	## *** Download PDF file ***
-	output$downloadPlotPDF <- downloadHandler(
-		filename <- function() { paste('Boxplot.pdf') },
-		content <- function(file) {
-			pdf(file, width = input$myWidth/72, height = input$myHeight/72)
-			## ---------------
-			generateBoxPlot(dataM())
-			## ---------------
-			dev.off()
-		},
-		contentType = 'application/pdf' # MIME type of the image
-	)
-	## *** Download SVG file ***
-	output$downloadPlotSVG <- downloadHandler(
-		filename <- function() { paste('Boxplot.svg') },
-		content <- function(file) {
-			svg(file, width = input$myWidth/72, height = input$myHeight/72)
-			## ---------------
-			generateBoxPlot(dataM())
-			## ---------------
-			dev.off()
-		},
-		contentType = 'image/svg'
-	)
+  # *** Generate the box plot ***
+  generate_box_plot <- function(plot_data) {
+    par(mar = c(5, 8, 4, 2))
 
-	# *** Output boxplot statistics in table below plot ***
-	output$boxplotStatsTable <- renderTable({
-		if(is.null(dataM()) || is.null(boxplotStats())) return(NULL)
-		M<-rbind(as.matrix(boxplotStats()$stats[c(5,4,3,2,1),]),boxplotStats()$n)
-		if(input$addMeans){
-			M<-rbind(M, colMeans(dataM(), na.rm=TRUE))
-			rownames(M)<-c("Upper whisker","3rd quartile","Median","1st quartile","Lower whisker", "Nr. of data points", "Mean")
-			colnames(M)<-colnames(dataM())
-		} else {
-			rownames(M)<-c("Upper whisker","3rd quartile","Median","1st quartile","Lower whisker", "Nr. of data points")
-			colnames(M)<-colnames(dataM())
-		}
-		M
-	}, rownames = TRUE)
-	
-	# *** Print figure legend ***
-	output$FigureLegend <- renderPrint({
-		if(is.null(dataM()) || is.null(boxplotStats())) return(invisible())
-		# Center lines show the medians; box limits indicate the 25th and 75th percentiles as determined by R software; whiskers extend to minimum and maximum values; crosses represent means; bars indicate 95% confidence intervals. n = 100, 76, 16, 76, 41 sample points.
-		# Generate vector with pieces of the legend based on user selections
-		FL<-vector()
-		# Figure legend for boxplot
-		if(input$plotType=='0'){
-			FL<-c("Center lines show the medians; box limits indicate the 25th and 75th percentiles as determined by R software")
-			# one of these three, depending on whisker definition choice:
-			# - Spear: "; whiskers extend to minimum and maximum values."
-			# - Tukey: "; whiskers extend 1.5 times the interquartile range from the 25th and 75th percentiles; outliers are represented by dots."
-			# - Altman: " and whiskers the 5th and 95th percentiles; outliers are represented by dots."
-			if(input$whiskerType==0){
-				FL<-append(FL, paste("; whiskers extend 1.5 times the interquartile range from the 25th and 75th percentiles, outliers are represented by dots", sep=""))
-			} else if(input$whiskerType==1){
-				FL<-append(FL, "; whiskers extend to minimum and maximum values")		
-			} else {
-				FL<-append(FL, paste("; whiskers extend to 5th and 95th percentiles, outliers are represented by dots", sep=""))		
-			}
-			# Means are added as crosses
-			if(input$addMeans & input$plotType=='0'){ FL<-append(FL, c("; crosses represent sample means")) }
-			# Confidence intervals of means are displayed as grey bars
-			if(input$addMeans & input$addMeanCI & input$plotType=='0'){ FL<-append(FL, paste("; bars indicate ", input$meanCI,"% confidence intervals of the means", sep="")) }
-			# Variable width of boxplots
-			if(input$myVarwidth){ FL<-append(FL, c("; width of the boxes is proportional to the square root of the sample size")) }
-			# Points are plotted on top of boxplots
-			if(input$showDataPoints){ FL<-append(FL, c("; data points are plotted as open circles")) }
-			# Sample size
-			sampleSizes<-boxplotStats()$n
-			if(length(unique(sampleSizes))==1){ FL<-append(FL, paste(". n = ", sampleSizes[1], " sample points", sep="")) } 
-		  	else { FL<-append(FL, paste(". n = ",paste(sampleSizes, collapse=", "), " sample points", sep="")) }
-			FL<-append(FL, ".")
-		} else {
-			# radioButtons("otherPlotType", "", list("Violin plot"=0, "Bean plot"=1)),
-			if (input$otherPlotType=='0'){ # Violin plot
-				FL<-c("White circles show the medians; 
-				box limits indicate the 25th and 75th percentiles as determined by R software; 
-				whiskers extend 1.5 times the interquartile range from the 25th and 75th percentiles; 
-				polygons represent density estimates of data and extend to extreme values.")
-			} else if (input$otherPlotType=='1') { # Bean plot
-		# Display median or mean for bean plot?
-				if(input$beanPlotMedianMean==0){ myBeanplotCenter<-"median" } else { myBeanplotCenter<-"mean" }
-				FL<-paste("Black lines show the ",myBeanplotCenter,"s; 
-				white lines represent individual data points; 
-				polygons represent the estimated density of the data.", sep="")
-				#if(input$beanplotOverall){FL<-append(FL, c("dotted line represents overall "))}
-			}
-		} # END: other plot types	
-		cat(paste(FL, collapse=""))
-		#- I am not sure what to put for the notches because we don't add '*'s to the box plots.
-	})
+    nr_of_samples <- ncol(plot_data)
 
-	# *** Download boxplot data in csv format ***
-	output$downloadBoxplotData <- downloadHandler(
-    	filename = function() { "BoxplotData.csv" },
-   		content = function(file) {
-		write.csv(dataM(), file, row.names=FALSE)
-    }) ###
+    plot_data_m <- plot_data
+    not_plot_points <- seq_len(nr_of_samples)
+    plot_points <- integer(0)
 
+    if (input$plotDataPoints) {
+      nr_needed <- as.numeric(input$nrOfDataPoints)
+      not_plot_points <- integer(0)
+      for (i in seq_len(nr_of_samples)) {
+        if (sum(!is.na(plot_data[[i]])) < nr_needed) {
+          plot_data_m[[i]] <- NA
+          plot_points <- c(plot_points, i)
+        } else {
+          not_plot_points <- c(not_plot_points, i)
+        }
+      }
+    }
+
+    my_colours <- parse_colours(input$myColours)
+    my_colours_2 <- parse_colours(input$myOtherPlotColours)
+    point_colors <- parse_colours(input$pointColors)
+
+    # Replicate colors if only one is provided
+    if (length(my_colours) == 1) {
+      my_colours <- rep(my_colours, nr_of_samples)
+    }
+    if (length(my_colours_2) == 1) {
+      my_colours_2 <- rep(my_colours_2, nr_of_samples)
+    }
+    if (length(point_colors) == 1) {
+      point_colors <- rep(point_colors, nr_of_samples)
+    }
+
+    point_t <- 1 - (input$pointTransparency / 100)
+    point_c <- NA
+    if (point_t < 1) {
+      point_c <- rgb(
+        t(col2rgb(point_colors)),
+        alpha = 255 * point_t,
+        maxColorValue = 255
+      )
+    } else {
+      point_c <- point_colors
+    }
+
+    my_orientation <- (input$myOrientation == 1)
+    my_varwidth <- (input$myVarwidth == TRUE)
+    my_notch <- (input$myNotch == TRUE)
+    my_log <- ""
+    xmin <- NA
+    xmax <- NA
+    ymin <- NA
+    ymax <- NA
+
+    if (input$logScale == TRUE) {
+      my_log <- if (my_orientation) "x" else "y"
+    }
+
+    if (input$ylimit != "" && !my_orientation) {
+      ymin <- as.numeric(gsub("\\s", "", strsplit(input$ylimit, ",")[[1]][1]))
+      ymax <- as.numeric(gsub("\\s", "", strsplit(input$ylimit, ",")[[1]][2]))
+    }
+    if (input$xlimit != "" && my_orientation) {
+      xmin <- as.numeric(gsub("\\s", "", strsplit(input$xlimit, ",")[[1]][1]))
+      xmax <- as.numeric(gsub("\\s", "", strsplit(input$xlimit, ",")[[1]][2]))
+    }
+
+    # Calculate a shared default range for consistent axes across plot types
+    shared_lim <- if (all(is.na(plot_data))) {
+      NULL
+    } else {
+      r <- range(plot_data, na.rm = TRUE)
+      if (input$showNrOfPoints) {
+        if (input$logScale == TRUE && length(r[r > 0]) > 0) {
+          # Log scale requires multiplicative expansion to prevent negatives
+          c(r[1], r[2] * (10^(diff(log10(r[r > 0])) * 0.15)))
+        } else {
+          # Expand top geometrically to make space for data counts
+          padding <- diff(r) * 0.15
+          c(r[1] - (diff(r) * 0.04), r[2] + padding)
+        }
+      } else {
+        r
+      }
+    }
+
+    vals_lim <- if (!my_orientation && input$ylimit != "") {
+      c(ymin, ymax)
+    } else if (my_orientation && input$xlimit != "") {
+      c(xmin, xmax)
+    } else {
+      shared_lim
+    }
+
+    xaxis_label_angle <- if (input$xaxisLabelAngle) 2 else 1
+    par(las = xaxis_label_angle)
+
+    if (input$plotType == "0") { # Boxplot
+      boxplot(
+        plot_data_m,
+        main = input$myTitle,
+        sub = input$mySubtitle,
+        xlab = input$myXlab,
+        ylab = input$myYlab,
+        col = my_colours,
+        horizontal = my_orientation,
+        varwidth = my_varwidth,
+        notch = my_notch,
+        outline = !input$showDataPoints,
+        range = my_range(),
+        log = my_log,
+        ylim = vals_lim,
+        las = xaxis_label_angle,
+        frame.plot = FALSE,
+        # Font sizes
+        cex.main = input$cexTitle / 10,
+        cex.lab = input$cexAxislabel / 10,
+        cex.axis = input$cexAxis / 10
+      )
+    } else {
+      if (input$otherPlotType == "0") { # Violin plot
+        if (length(not_plot_points) > 0) {
+          vioplot(
+            as.list(data.frame(plot_data_m)),
+            col = my_colours_2,
+            horizontal = my_orientation,
+            border = input$violinBorder,
+            cex.axis = input$cexAxis / 10,
+            ylim = vals_lim,
+            names = colnames(plot_data_m),
+            log = my_log
+          )
+        } else {
+          plot(
+            1,
+            type = "n", axes = FALSE, xlab = "", ylab = "",
+            xlim = if (my_orientation) {
+              shared_lim
+            } else {
+              c(0.5, nr_of_samples + 0.5)
+            },
+            ylim = if (!my_orientation) {
+              shared_lim
+            } else {
+              c(0.5, nr_of_samples + 0.5)
+            }
+          )
+          axis(if (my_orientation) 1 else 2, cex.axis = input$cexAxis / 10)
+          axis(
+            if (my_orientation) 2 else 1,
+            at = seq_len(nr_of_samples),
+            labels = colnames(plot_data),
+            cex.axis = input$cexAxis / 10
+          )
+        }
+        title(
+          main = input$myTitle,
+          sub = input$mySubtitle,
+          xlab = input$myXlab,
+          ylab = input$myYlab,
+          cex.main = input$cexTitle / 10,
+          cex.lab = input$cexAxislabel / 10
+        )
+      } else { # Bean plot
+        my_beanplot_center <- if (input$beanPlotMedianMean == 0) {
+          "median"
+        } else {
+          "mean"
+        }
+        if (length(not_plot_points) > 0) {
+          beanplot(
+            data.frame(plot_data_m[, not_plot_points, drop = FALSE]),
+            at = not_plot_points,
+            xlim = c(0.5, nr_of_samples + 0.5),
+            ylim = vals_lim,
+            col = if (length(my_colours_2) > 1) {
+              as.list(my_colours_2)
+            } else {
+              my_colours_2
+            },
+            horizontal = my_orientation,
+            border = input$beanBorder,
+            what = c(1, 1, 1, as.logical(as.numeric(input$beanPlotMedianMean))),
+            cex.axis = input$cexAxis / 10,
+            overallline = my_beanplot_center,
+            names = colnames(plot_data)[not_plot_points],
+            frame.plot = FALSE,
+            log = my_log
+          )
+          axis(
+            if (my_orientation) 2 else 1,
+            at = seq_len(nr_of_samples),
+            labels = colnames(plot_data),
+            cex.axis = input$cexAxis / 10
+          )
+        } else {
+          plot(
+            1,
+            type = "n", axes = FALSE, xlab = "", ylab = "",
+            xlim = if (my_orientation) {
+              shared_lim
+            } else {
+              c(0.5, nr_of_samples + 0.5)
+            },
+            ylim = if (!my_orientation) {
+              shared_lim
+            } else {
+              c(0.5, nr_of_samples + 0.5)
+            }
+          )
+          axis(if (my_orientation) 1 else 2, cex.axis = input$cexAxis / 10)
+          axis(
+            if (my_orientation) 2 else 1,
+            at = seq_len(nr_of_samples),
+            labels = colnames(plot_data),
+            cex.axis = input$cexAxis / 10
+          )
+        }
+        title(
+          main = input$myTitle,
+          sub = input$mySubtitle,
+          xlab = input$myXlab,
+          ylab = input$myYlab,
+          cex.main = input$cexTitle / 10,
+          cex.lab = input$cexAxislabel / 10
+        )
+      }
+    }
+
+    # Add grid
+    if (input$addGrid == 1) {
+      grid()
+    } else if (input$addGrid == 2) {
+      grid(nx = NULL, ny = NA)
+    } else if (input$addGrid == 3) {
+      grid(nx = NA, ny = NULL)
+    }
+
+    # Samples means
+    if (input$addMeans && input$plotType == "0") {
+      boxplot_means <- colMeans(plot_data, na.rm = TRUE)
+      if (my_orientation) {
+        points(boxplot_means, seq_along(boxplot_means), pch = 18, col = "red")
+      } else {
+        points(seq_along(boxplot_means), boxplot_means, pch = 18, col = "red")
+      }
+
+      # Add CI of means
+      if (input$addMeanCI) {
+        for (i in seq_along(plot_data)) {
+          my_sample <- na.omit(plot_data[[i]])
+          n <- length(my_sample)
+          if (n > 1) {
+            standard_error <- sd(my_sample) / sqrt(n)
+            ci_level <- as.numeric(input$meanCI) / 100
+            t_value <- qt((1 + ci_level) / 2, df = n - 1)
+            margin_error <- t_value * standard_error
+            lower_ci <- boxplot_means[i] - margin_error
+            upper_ci <- boxplot_means[i] + margin_error
+
+            if (my_orientation) {
+              lines(c(lower_ci, upper_ci), c(i, i), col = "red", lwd = 2)
+              lines(
+                c(lower_ci, lower_ci), c(i - 0.1, i + 0.1),
+                col = "red", lwd = 2
+              )
+              lines(
+                c(upper_ci, upper_ci), c(i - 0.1, i + 0.1),
+                col = "red", lwd = 2
+              )
+            } else {
+              lines(c(i, i), c(lower_ci, upper_ci), col = "red", lwd = 2)
+              lines(
+                c(i - 0.1, i + 0.1), c(lower_ci, lower_ci),
+                col = "red", lwd = 2
+              )
+              lines(
+                c(i - 0.1, i + 0.1), c(upper_ci, upper_ci),
+                col = "red", lwd = 2
+              )
+            }
+          }
+        }
+      }
+    }
+
+    # Add numbers of data points
+    if (input$showNrOfPoints) {
+      nr_points <- boxplot_stats()$n
+      if (my_orientation) {
+        pos_x <- if (input$logScale == TRUE) 10^par("usr")[2] else par("usr")[2]
+        text(
+          x = pos_x,
+          y = seq_along(nr_points),
+          labels = nr_points,
+          pos = 2
+        )
+      } else {
+        pos_y <- if (input$logScale == TRUE) 10^par("usr")[4] else par("usr")[4]
+        text(
+          x = seq_along(nr_points),
+          y = pos_y,
+          labels = nr_points,
+          pos = 1
+        )
+      }
+    }
+
+    # Add data points if selected or if forced by plotDataPoints limit
+    if (input$showDataPoints || length(plot_points) > 0) {
+      plot_data_points <- plot_data
+      if (!input$showDataPoints && length(plot_points) > 0) {
+        # Only plot points for samples below the limit
+        plot_data_points[, not_plot_points] <- NA
+      }
+
+      if (input$datapointType == 1) { # Bee swarm
+        beeswarm(
+          plot_data_points,
+          add = TRUE,
+          col = point_c,
+          horizontal = my_orientation,
+          cex = input$pointSize / 10,
+          pch = 16
+        )
+      } else { # Jittered or Default
+        jittered.points(
+          plot_data_points,
+          my_orientation,
+          input$datapointType,
+          point_colors,
+          input$pointTransparency,
+          input$pointSize / 10
+        )
+      }
+    }
+  }
+
+  ## *** Data in table ***
+  output$filetable <- renderTable({
+    if (is.null(data_m())) {
+      return(NULL)
+    }
+    if (nrow(data_m()) < 500) {
+      return(data_m())
+    } else {
+      return(data_m()[1:100, ])
+    }
+  })
+
+  # *** Boxplot (using 'generate_box_plot'-function) ***
+  output$boxPlot <- renderPlot(
+    {
+      if (is.null(data_m())) {
+        return(NULL)
+      }
+      generate_box_plot(data_m())
+    },
+    height = function() {
+      input$myHeight
+    },
+    width = function() {
+      input$myWidth
+    }
+  )
+
+  ## *** Download EPS file ***
+  output$downloadPlotEPS <- downloadHandler(
+    filename = function() {
+      "Boxplot.eps"
+    },
+    content = function(file) {
+      postscript(
+        file,
+        horizontal = FALSE, onefile = FALSE, paper = "special",
+        width = input$myWidth / 72, height = input$myHeight / 72
+      )
+      generate_box_plot(data_m())
+      dev.off()
+    },
+    contentType = "application/postscript"
+  )
+
+  ## *** Download PDF file ***
+  output$downloadPlotPDF <- downloadHandler(
+    filename = function() {
+      "Boxplot.pdf"
+    },
+    content = function(file) {
+      pdf(file, width = input$myWidth / 72, height = input$myHeight / 72)
+      generate_box_plot(data_m())
+      dev.off()
+    },
+    contentType = "application/pdf"
+  )
+
+  ## *** Download SVG file ***
+  output$downloadPlotSVG <- downloadHandler(
+    filename = function() {
+      "Boxplot.svg"
+    },
+    content = function(file) {
+      svg(file, width = input$myWidth / 72, height = input$myHeight / 72)
+      generate_box_plot(data_m())
+      dev.off()
+    },
+    contentType = "image/svg"
+  )
+
+  # *** Output boxplot statistics in table below plot ***
+  output$boxplotStatsTable <- renderTable(
+    {
+      if (is.null(data_m()) || is.null(boxplot_stats())) {
+        return(NULL)
+      }
+      get_stats_matrix(data_m(), boxplot_stats(), input$addMeans)
+    },
+    rownames = TRUE
+  )
+
+  # *** Print figure legend ***
+  output$FigureLegend <- renderPrint({
+    if (is.null(data_m()) || is.null(boxplot_stats())) {
+      return(invisible())
+    }
+    fl <- generate_figure_legend(
+      stats = boxplot_stats(),
+      plot_type = input$plotType,
+      other_plot_type = input$otherPlotType,
+      whisker_type = input$whiskerType,
+      add_means = input$addMeans,
+      add_mean_ci = input$addMeanCI,
+      mean_ci_val = input$meanCI,
+      my_varwidth = input$myVarwidth,
+      bean_plot_center_type = input$beanPlotMedianMean
+    )
+    cat(fl, "\n")
+  })
+
+
+  # *** Download boxplot data in csv format ***
+  output$downloadBoxplotData <- downloadHandler(
+    filename = function() {
+      "BoxplotData.csv"
+    },
+    content = function(file) {
+      write.csv(data_m(), file, row.names = FALSE)
+    }
+  )
 })
-
-
-
-
