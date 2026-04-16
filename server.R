@@ -41,8 +41,7 @@ shinyServer(function(input, output, session) {
 			mySep<-switch(input$fileSepDF, '1'=",",'2'="\t",'3'=";", '4'="") #list("Comma"=1,"Tab"=2,"Semicolon"=3)
 				data<-read.table(inFile$datapath, sep=mySep, header=TRUE, fill=TRUE, check.names=FALSE)
 		} else { # To be looked into again - for special case when last column has empty entries in some rows
-			req(input$myData)
-			if(input$myData == "") {return(NULL)}
+			if(is.null(input$myData) || input$myData == "") {return(NULL)}
 			mySep<-switch(input$fileSepP, '1'=",",'2'="\t",'3'=";")
 			data <- read.table(text = input$myData, sep=mySep, header=TRUE, fill=TRUE, check.names=FALSE)
 		}
@@ -65,6 +64,7 @@ shinyServer(function(input, output, session) {
 	
 	# *** Get boxplot statistics ***
 	boxplotStats <- reactive({
+		if(is.null(dataM())) return(NULL)
 		return(boxplot(dataM(), na.rm=TRUE, range=myRange(), plot=FALSE))
 	})
 	
@@ -293,6 +293,7 @@ shinyServer(function(input, output, session) {
 
 	## *** Data in table ***
 	output$filetable <- renderTable({
+		if(is.null(dataM())) return(NULL)
 		if(nrow(dataM())<500){
 			return(dataM())
 		} else {return(dataM()[1:100,])}
@@ -300,6 +301,7 @@ shinyServer(function(input, output, session) {
 
 	# *** Boxplot (using 'generateBoxPlot'-function) ***
 	output$boxPlot <- renderPlot({
+		if(is.null(dataM())) return(NULL)
 		generateBoxPlot(dataM())
 	}, height = heightSize, width = widthSize)
 	
@@ -342,6 +344,7 @@ shinyServer(function(input, output, session) {
 
 	# *** Output boxplot statistics in table below plot ***
 	output$boxplotStatsTable <- renderTable({
+		if(is.null(dataM()) || is.null(boxplotStats())) return(NULL)
 		M<-rbind(as.matrix(boxplotStats()$stats[c(5,4,3,2,1),]),boxplotStats()$n)
 		if(input$addMeans){
 			M<-rbind(M, colMeans(dataM(), na.rm=TRUE))
@@ -356,6 +359,7 @@ shinyServer(function(input, output, session) {
 	
 	# *** Print figure legend ***
 	output$FigureLegend <- renderPrint({
+		if(is.null(dataM()) || is.null(boxplotStats())) return(invisible())
 		# Center lines show the medians; box limits indicate the 25th and 75th percentiles as determined by R software; whiskers extend to minimum and maximum values; crosses represent means; bars indicate 95% confidence intervals. n = 100, 76, 16, 76, 41 sample points.
 		# Generate vector with pieces of the legend based on user selections
 		FL<-vector()
