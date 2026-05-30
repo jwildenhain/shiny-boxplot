@@ -17,8 +17,14 @@ sample_data_3_cache <- as.data.frame(
 
 # Helper function to prevent redundant color parsing
 parse_colours <- function(col_strings) {
+  if (is.null(col_strings) || length(col_strings) == 0 || col_strings == "") {
+    return(c("grey"))
+  }
   my_colours <- gsub("\\s", "", strsplit(col_strings, ",")[[1]])
   my_colours <- gsub("0x", "#", my_colours)
+  if (length(my_colours) == 0) {
+    return(c("grey"))
+  }
   return(my_colours)
 }
 
@@ -39,6 +45,66 @@ shinyServer(function(input, output, session) {
     isolate({
       updateTextInput(session, "myData", label = ",", value = "")
     })
+  })
+
+  # *** Preset Style Guides Observer ***
+  observeEvent(input$styleGuide, {
+    if (input$styleGuide == "none") {
+      return()
+    }
+    
+    # 1. Nature Journal
+    if (input$styleGuide == "nature") {
+      updateTextInput(session, "myColours", value = "light grey, white")
+      updateTextInput(session, "myOtherPlotColours", value = "light grey, white")
+      updateRadioButtons(session, "addGrid", selected = "0")
+      updateCheckboxInput(session, "fontSizes", value = TRUE)
+      updateNumericInput(session, "cexTitle", value = 14)
+      updateNumericInput(session, "cexAxislabel", value = 12)
+      updateNumericInput(session, "cexAxis", value = 10)
+      updateTextInput(session, "violinBorder", value = "grey")
+      updateTextInput(session, "beanBorder", value = "grey")
+      updateTextInput(session, "pointColors", value = "black")
+    }
+    # 2. Science Journal
+    else if (input$styleGuide == "science") {
+      updateTextInput(session, "myColours", value = "#0A2540, #FF6B6B, #4D96FF, #6BCB77, #F9D976")
+      updateTextInput(session, "myOtherPlotColours", value = "#0A2540, #FF6B6B, #4D96FF")
+      updateRadioButtons(session, "addGrid", selected = "0")
+      updateCheckboxInput(session, "fontSizes", value = TRUE)
+      updateNumericInput(session, "cexTitle", value = 14)
+      updateNumericInput(session, "cexAxislabel", value = 12)
+      updateNumericInput(session, "cexAxis", value = 10)
+      updateTextInput(session, "violinBorder", value = "black")
+      updateTextInput(session, "beanBorder", value = "black")
+      updateTextInput(session, "pointColors", value = "black")
+    }
+    # 3. The Economist
+    else if (input$styleGuide == "economist") {
+      updateTextInput(session, "myColours", value = "#005A9C, #7D7D7D, #E50011, #FFD100, #00A4E4")
+      updateTextInput(session, "myOtherPlotColours", value = "#005A9C, #7D7D7D, #E50011")
+      updateRadioButtons(session, "addGrid", selected = "3") # Y only
+      updateCheckboxInput(session, "fontSizes", value = TRUE)
+      updateNumericInput(session, "cexTitle", value = 16)
+      updateNumericInput(session, "cexAxislabel", value = 12)
+      updateNumericInput(session, "cexAxis", value = 11)
+      updateTextInput(session, "violinBorder", value = "white")
+      updateTextInput(session, "beanBorder", value = "white")
+      updateTextInput(session, "pointColors", value = "#E50011")
+    }
+    # 4. Financial Times
+    else if (input$styleGuide == "ft") {
+      updateTextInput(session, "myColours", value = "#0F5499, #990F3D, #3F3F3F, #D9A752, #5C88BF")
+      updateTextInput(session, "myOtherPlotColours", value = "#0F5499, #990F3D, #3F3F3F")
+      updateRadioButtons(session, "addGrid", selected = "3") # Y only
+      updateCheckboxInput(session, "fontSizes", value = TRUE)
+      updateNumericInput(session, "cexTitle", value = 16)
+      updateNumericInput(session, "cexAxislabel", value = 12)
+      updateNumericInput(session, "cexAxis", value = 11)
+      updateTextInput(session, "violinBorder", value = "#1e293b")
+      updateTextInput(session, "beanBorder", value = "#1e293b")
+      updateTextInput(session, "pointColors", value = "#990F3D")
+    }
   })
 
   # *** Read in data matrix ***
@@ -220,7 +286,376 @@ shinyServer(function(input, output, session) {
 
   # *** Generate the box plot ***
   generate_box_plot <- function(plot_data) {
-    par(mar = c(5, 8, 4, 2))
+    # Safe input resolvers to prevent "argument is of length zero" or NULL crashes during reactive updates
+    plot_engine <- if (is.null(input$plotEngine) || length(input$plotEngine) == 0) "classic" else input$plotEngine
+    plot_type <- if (is.null(input$plotType) || length(input$plotType) == 0) "0" else input$plotType
+    other_plot_type <- if (is.null(input$otherPlotType) || length(input$otherPlotType) == 0) "0" else input$otherPlotType
+    bean_plot_median_mean <- if (is.null(input$beanPlotMedianMean) || length(input$beanPlotMedianMean) == 0) 0 else as.numeric(input$beanPlotMedianMean)
+    my_varwidth <- if (is.null(input$myVarwidth) || length(input$myVarwidth) == 0) FALSE else (input$myVarwidth == TRUE)
+    my_notch <- if (is.null(input$myNotch) || length(input$myNotch) == 0) FALSE else (input$myNotch == TRUE)
+    show_data_points <- if (is.null(input$showDataPoints) || length(input$showDataPoints) == 0) FALSE else (input$showDataPoints == TRUE)
+    datapoint_type <- if (is.null(input$datapointType) || length(input$datapointType) == 0) 0 else as.numeric(input$datapointType)
+    add_means <- if (is.null(input$addMeans) || length(input$addMeans) == 0) FALSE else (input$addMeans == TRUE)
+    add_mean_ci <- if (is.null(input$addMeanCI) || length(input$addMeanCI) == 0) FALSE else (input$addMeanCI == TRUE)
+    mean_ci <- if (is.null(input$meanCI) || length(input$meanCI) == 0) 95 else as.numeric(input$meanCI)
+    log_scale <- if (is.null(input$logScale) || length(input$logScale) == 0) FALSE else (input$logScale == TRUE)
+    my_orientation <- if (is.null(input$myOrientation) || length(input$myOrientation) == 0) FALSE else (input$myOrientation == 1)
+    add_grid <- if (is.null(input$addGrid) || length(input$addGrid) == 0) 0 else as.numeric(input$addGrid)
+    show_nr_of_points <- if (is.null(input$showNrOfPoints) || length(input$showNrOfPoints) == 0) FALSE else (input$showNrOfPoints == TRUE)
+
+    if (plot_engine == "ggplot") {
+      library(ggplot2)
+      
+      # Convert plot_data to long format
+      df_long <- data.frame(
+        Value = unlist(plot_data, use.names = FALSE),
+        Group = rep(colnames(plot_data), each = nrow(plot_data))
+      )
+      df_long <- na.omit(df_long)
+      
+      # Make sure Group is a factor with original order
+      df_long$Group <- factor(df_long$Group, levels = colnames(plot_data))
+      
+      # Parse colours
+      my_colours <- parse_colours(input$myColours)
+      my_colours_2 <- parse_colours(input$myOtherPlotColours)
+      point_colors <- parse_colours(input$pointColors)
+      
+      nr_of_samples <- ncol(plot_data)
+      # Always recycle color vectors to match exact number of samples so ggplot manual scale never errors
+      my_colours <- rep(my_colours, length.out = nr_of_samples)
+      my_colours_2 <- rep(my_colours_2, length.out = nr_of_samples)
+      point_colors <- rep(point_colors, length.out = nr_of_samples)
+      
+      plot_colours <- if (input$plotType == "0") my_colours else my_colours_2
+      
+      # Initialize ggplot
+      # Initialize ggplot and Plot Types
+      if (input$plotType == "0") { # Boxplot
+        my_varwidth <- (input$myVarwidth == TRUE)
+        my_notch <- (input$myNotch == TRUE)
+        
+        # Get natively calculated boxplot statistics matching the whiskerType (Tukey, Spear, Altman)
+        bp_stats <- boxplot_stats()
+        
+        notchlower_val <- bp_stats$conf[1, ]
+        notchupper_val <- bp_stats$conf[2, ]
+        if (isTRUE(input$logScale)) {
+          # Safely transform to log10 space since scale_y_log10 doesn't automatically transform custom aesthetics
+          notchlower_val <- log10(pmax(1e-10, notchlower_val))
+          notchupper_val <- log10(pmax(1e-10, notchupper_val))
+        }
+        
+        df_stats <- data.frame(
+          Group = factor(bp_stats$names, levels = colnames(plot_data)),
+          ymin = bp_stats$stats[1, ],
+          lower = bp_stats$stats[2, ],
+          middle = bp_stats$stats[3, ],
+          upper = bp_stats$stats[4, ],
+          ymax = bp_stats$stats[5, ],
+          notchlower = notchlower_val,
+          notchupper = notchupper_val,
+          fill = bp_stats$names
+        )
+        
+        p <- ggplot(df_stats, aes(x = Group, fill = Group)) +
+          suppressWarnings(geom_boxplot(
+            aes(
+              ymin = ymin, lower = lower, middle = middle, upper = upper, ymax = ymax,
+              notchlower = notchlower, notchupper = notchupper
+            ),
+            stat = "identity",
+            varwidth = my_varwidth,
+            notch = my_notch,
+            width = 0.6
+          ))
+        
+        # Identify outliers matching the calculated whiskers
+        df_outliers <- df_long
+        df_outliers$ymin <- df_stats$ymin[match(df_outliers$Group, df_stats$Group)]
+        df_outliers$ymax <- df_stats$ymax[match(df_outliers$Group, df_stats$Group)]
+        df_outliers <- df_outliers[df_outliers$Value < df_outliers$ymin | df_outliers$Value > df_outliers$ymax, ]
+        
+        # Overlay outliers if they are NOT already showing all points
+        if (!input$showDataPoints && nrow(df_outliers) > 0) {
+          p <- p + geom_point(
+            data = df_outliers,
+            aes(x = Group, y = Value),
+            color = "black",
+            size = 1.5,
+            shape = 19,
+            inherit.aes = FALSE
+          )
+        }
+      } else {
+        # Initialize ggplot for Violin/Bean plot
+        p <- ggplot(df_long, aes(x = Group, y = Value, fill = Group))
+        
+        if (input$otherPlotType == "0") { # Violin
+          p <- p + geom_violin(
+            color = input$violinBorder,
+            width = 0.8
+          )
+        } else { # Beanplot
+          p <- p + geom_violin(
+            color = input$beanBorder,
+            width = 0.8,
+            alpha = 0.7
+          )
+          
+          # Median/Mean crossbar
+          center_fun <- if (input$beanPlotMedianMean == 0) "median" else "mean"
+          p <- p + stat_summary(
+            fun = center_fun,
+            geom = "crossbar",
+            width = 0.4,
+            color = "black",
+            middle.linewidth = 0.8
+          )
+          
+          # Add individual horizontal data line segments inside the bean density shape
+          p <- p + geom_segment(
+            aes(
+              x = as.numeric(Group) - 0.15,
+              xend = as.numeric(Group) + 0.15,
+              y = Value,
+              yend = Value
+            ),
+            color = "#1e293b",
+            linewidth = 0.4,
+            alpha = 0.4
+          )
+        }
+      }
+      
+      # Apply custom fill colors
+      p <- p + scale_fill_manual(values = plot_colours)
+      
+      # Data points overlay
+      if (input$showDataPoints) {
+        pt_trans <- 1 - (input$pointTransparency / 100)
+        pt_sz <- input$pointSize / 10
+        pt_col <- point_colors[1]
+        
+        # Specify data and mapping for Boxplot type since p uses df_stats as default
+        points_data <- if (input$plotType == "0") df_long else NULL
+        points_aes <- if (input$plotType == "0") aes(y = Value) else NULL
+        
+        if (input$datapointType == 1) { # Beeswarm / Minimal jitter
+          p <- p + geom_jitter(
+            data = points_data,
+            mapping = points_aes,
+            width = 0.05, height = 0,
+            color = pt_col, size = pt_sz, alpha = pt_trans
+          )
+        } else if (input$datapointType == 2) { # Jittered
+          p <- p + geom_jitter(
+            data = points_data,
+            mapping = points_aes,
+            width = 0.2, height = 0,
+            color = pt_col, size = pt_sz, alpha = pt_trans
+          )
+        } else { # Normal/Centered stripchart
+          p <- p + geom_point(
+            data = points_data,
+            mapping = points_aes,
+            position = position_nudge(x = 0),
+            color = pt_col, size = pt_sz, alpha = pt_trans
+          )
+        }
+      }
+      
+      # Means and CIs for Boxplot
+      if (input$addMeans && input$plotType == "0") {
+        p <- p + stat_summary(
+          data = df_long,
+          aes(x = Group, y = Value),
+          fun = mean,
+          geom = "point",
+          shape = 18,
+          size = 4,
+          color = "red",
+          inherit.aes = FALSE
+        )
+        
+        if (input$addMeanCI) {
+          ci_fun <- function(x) {
+            n <- sum(!is.na(x))
+            if (n <= 1) return(c(ymin = NA, ymax = NA))
+            se <- sd(x, na.rm = TRUE) / sqrt(n)
+            ci_level <- as.numeric(input$meanCI) / 100
+            t_val <- qt((1 + ci_level) / 2, df = n - 1)
+            me <- t_val * se
+            m <- mean(x, na.rm = TRUE)
+            c(ymin = m - me, ymax = m + me)
+          }
+          p <- p + stat_summary(
+            data = df_long,
+            aes(x = Group, y = Value),
+            fun.data = ci_fun,
+            geom = "errorbar",
+            width = 0.2,
+            color = "red",
+            linewidth = 0.8,
+            inherit.aes = FALSE
+          )
+        }
+      }
+      
+      # Log Scale
+      if (isTRUE(input$logScale)) {
+        p <- p + scale_y_log10()
+      }
+      
+      # Labels & Font sizes
+      p <- p + labs(
+        title = input$myTitle,
+        subtitle = input$mySubtitle,
+        x = input$myXlab,
+        y = input$myYlab
+      )
+      
+      # Orientation
+      my_orientation <- (input$myOrientation == 1)
+      
+      # Resolve Y limits
+      ymin <- NA
+      ymax <- NA
+      xmin <- NA
+      xmax <- NA
+      
+      if (input$ylimit != "" && !my_orientation) {
+        ymin <- as.numeric(gsub("\\s", "", strsplit(input$ylimit, ",")[[1]][1]))
+        ymax <- as.numeric(gsub("\\s", "", strsplit(input$ylimit, ",")[[1]][2]))
+      }
+      if (input$xlimit != "" && my_orientation) {
+        xmin <- as.numeric(gsub("\\s", "", strsplit(input$xlimit, ",")[[1]][1]))
+        xmax <- as.numeric(gsub("\\s", "", strsplit(input$xlimit, ",")[[1]][2]))
+      }
+      
+      lims <- if (!my_orientation && !is.na(ymin)) {
+        c(ymin, ymax)
+      } else if (my_orientation && !is.na(xmin)) {
+        c(xmin, xmax)
+      } else {
+        NULL
+      }
+      
+      if (my_orientation) {
+        p <- p + coord_flip(ylim = lims)
+      } else {
+        if (!is.null(lims)) {
+          p <- p + coord_cartesian(ylim = lims)
+        }
+      }
+      
+      # Resolve style guide defaults for ggplot
+      style_font <- "Inter"
+      bg_fill <- "white"
+      panel_bg_fill <- "white"
+      grid_color <- "#e2e8f0"
+      axis_line_color <- "#475569"
+      plot_title_hjust <- 0.5
+      
+      if (input$styleGuide == "nature") {
+        style_font <- "sans"
+      } else if (input$styleGuide == "science") {
+        style_font <- "serif"
+      } else if (input$styleGuide == "economist") {
+        style_font <- "sans"
+        bg_fill <- "#e4eef2"
+        panel_bg_fill <- "#e4eef2"
+        grid_color <- "white"
+        axis_line_color <- "#1e293b"
+        plot_title_hjust <- 0
+      } else if (input$styleGuide == "ft") {
+        style_font <- "serif"
+        bg_fill <- "#fff1e5"
+        panel_bg_fill <- "#fff1e5"
+        grid_color <- "#e2d6ca"
+        axis_line_color <- "#1e293b"
+        plot_title_hjust <- 0
+      }
+
+      # Theme
+      p <- p + theme_minimal(base_family = style_font) +
+        theme(
+          plot.title = element_text(size = input$cexTitle * 1.5, face = "bold", hjust = plot_title_hjust),
+          plot.subtitle = element_text(size = input$cexTitle * 1.1, hjust = plot_title_hjust, color = "#475569"),
+          axis.title.x = element_text(size = input$cexAxislabel * 1.2),
+          axis.title.y = element_text(size = input$cexAxislabel * 1.2),
+          axis.text = element_text(size = input$cexAxis * 1.1),
+          legend.position = "none",
+          panel.background = element_rect(fill = panel_bg_fill, color = NA),
+          plot.background = element_rect(fill = bg_fill, color = NA),
+          axis.line = element_line(color = axis_line_color, linewidth = 0.6),
+          axis.ticks = element_line(color = axis_line_color, linewidth = 0.6)
+        )
+        
+      # Gridlines
+      if (input$addGrid == 0) {
+        p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+      } else if (input$addGrid == 2) { # X only (perpendicular to X)
+        p <- p + theme(panel.grid.major.y = element_blank(), panel.grid.minor = element_blank(), panel.grid.major.x = element_line(color = grid_color))
+      } else if (input$addGrid == 3) { # Y only (perpendicular to Y)
+        p <- p + theme(panel.grid.major.x = element_blank(), panel.grid.minor = element_blank(), panel.grid.major.y = element_line(color = grid_color))
+      } else {
+        p <- p + theme(
+          panel.grid.major = element_line(color = grid_color),
+          panel.grid.minor = element_blank()
+        )
+      }
+      
+      # Display N count text at top/right if requested
+      if (input$showNrOfPoints) {
+        # Calculate stats for the labels
+        nr_points <- sapply(plot_data, function(x) sum(!is.na(x)))
+        df_labels <- data.frame(
+          Group = factor(colnames(plot_data), levels = colnames(plot_data)),
+          y_pos = if (isTRUE(input$logScale)) {
+            10^(log10(max(plot_data, na.rm = TRUE)) + 0.1)
+          } else {
+            max(plot_data, na.rm = TRUE) * 1.05
+          },
+          label = paste0("n=", nr_points)
+        )
+        
+        # Overlay standard text labels
+        p <- p + geom_text(
+          data = df_labels,
+          aes(x = Group, y = y_pos, label = label),
+          inherit.aes = FALSE,
+          size = input$cexAxis * 0.35,
+          color = "#475569",
+          vjust = 0
+        )
+      }
+      
+      print(p)
+      return()
+    }
+
+    # Resolve style guide defaults for Classic R
+    bg_fill <- "white"
+    style_font <- ""
+    
+    if (input$styleGuide == "nature") {
+      style_font <- "sans"
+    } else if (input$styleGuide == "science") {
+      style_font <- "serif"
+    } else if (input$styleGuide == "economist") {
+      style_font <- "sans"
+      bg_fill <- "#e4eef2"
+    } else if (input$styleGuide == "ft") {
+      style_font <- "serif"
+      bg_fill <- "#fff1e5"
+    }
+    
+    if (style_font != "") {
+      par(mar = c(5, 8, 4, 2), bg = bg_fill, family = style_font)
+    } else {
+      par(mar = c(5, 8, 4, 2), bg = bg_fill)
+    }
 
     nr_of_samples <- ncol(plot_data)
 
@@ -277,7 +712,7 @@ shinyServer(function(input, output, session) {
     ymin <- NA
     ymax <- NA
 
-    if (input$logScale == TRUE) {
+    if (isTRUE(input$logScale)) {
       my_log <- if (my_orientation) "x" else "y"
     }
 
@@ -296,7 +731,7 @@ shinyServer(function(input, output, session) {
     } else {
       r <- range(plot_data, na.rm = TRUE)
       if (input$showNrOfPoints) {
-        if (input$logScale == TRUE && length(r[r > 0]) > 0) {
+        if (isTRUE(input$logScale) && length(r[r > 0]) > 0) {
           # Log scale requires multiplicative expansion to prevent negatives
           c(r[1], r[2] * (10^(diff(log10(r[r > 0])) * 0.15)))
         } else {
@@ -513,7 +948,7 @@ shinyServer(function(input, output, session) {
     if (input$showNrOfPoints) {
       nr_points <- boxplot_stats()$n
       if (my_orientation) {
-        pos_x <- if (input$logScale == TRUE) 10^par("usr")[2] else par("usr")[2]
+        pos_x <- if (isTRUE(input$logScale)) 10^par("usr")[2] else par("usr")[2]
         text(
           x = pos_x,
           y = seq_along(nr_points),
@@ -521,7 +956,7 @@ shinyServer(function(input, output, session) {
           pos = 2
         )
       } else {
-        pos_y <- if (input$logScale == TRUE) 10^par("usr")[4] else par("usr")[4]
+        pos_y <- if (isTRUE(input$logScale)) 10^par("usr")[4] else par("usr")[4]
         text(
           x = seq_along(nr_points),
           y = pos_y,
@@ -549,7 +984,7 @@ shinyServer(function(input, output, session) {
           pch = 16
         )
       } else { # Jittered or Default
-        jittered.points(
+        jittered_points(
           plot_data_points,
           my_orientation,
           input$datapointType,
