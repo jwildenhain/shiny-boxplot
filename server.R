@@ -302,6 +302,32 @@ shinyServer(function(input, output, session) {
     my_orientation <- if (is.null(input$myOrientation) || length(input$myOrientation) == 0) FALSE else (input$myOrientation == 1)
     add_grid <- if (is.null(input$addGrid) || length(input$addGrid) == 0) 0 else as.numeric(input$addGrid)
     show_nr_of_points <- if (is.null(input$showNrOfPoints) || length(input$showNrOfPoints) == 0) FALSE else (input$showNrOfPoints == TRUE)
+    style_guide <- if (is.null(input$styleGuide) || length(input$styleGuide) == 0) "none" else input$styleGuide
+    plot_data_points <- if (is.null(input$plotDataPoints) || length(input$plotDataPoints) == 0) FALSE else (input$plotDataPoints == TRUE)
+    nr_of_data_points <- if (is.null(input$nrOfDataPoints) || length(input$nrOfDataPoints) == 0) 5 else as.numeric(input$nrOfDataPoints)
+    xaxis_label_angle <- if (is.null(input$xaxisLabelAngle) || length(input$xaxisLabelAngle) == 0) FALSE else (input$xaxisLabelAngle == TRUE)
+    
+    cex_title <- if (is.null(input$cexTitle) || length(input$cexTitle) == 0) 14 else as.numeric(input$cexTitle)
+    cex_axislabel <- if (is.null(input$cexAxislabel) || length(input$cexAxislabel) == 0) 14 else as.numeric(input$cexAxislabel)
+    cex_axis <- if (is.null(input$cexAxis) || length(input$cexAxis) == 0) 12 else as.numeric(input$cexAxis)
+    
+    my_title <- if (is.null(input$myTitle) || length(input$myTitle) == 0) "" else input$myTitle
+    my_subtitle <- if (is.null(input$mySubtitle) || length(input$mySubtitle) == 0) "" else input$mySubtitle
+    my_xlab <- if (is.null(input$myXlab) || length(input$myXlab) == 0) "" else input$myXlab
+    my_ylab <- if (is.null(input$myYlab) || length(input$myYlab) == 0) "" else input$myYlab
+    
+    ylimit_val <- if (is.null(input$ylimit) || length(input$ylimit) == 0) "" else input$ylimit
+    xlimit_val <- if (is.null(input$xlimit) || length(input$xlimit) == 0) "" else input$xlimit
+    
+    my_colours_val <- if (is.null(input$myColours) || length(input$myColours) == 0) "light grey, white" else input$myColours
+    my_other_colours_val <- if (is.null(input$myOtherPlotColours) || length(input$myOtherPlotColours) == 0) "light grey, white" else input$myOtherPlotColours
+    point_colors_val <- if (is.null(input$pointColors) || length(input$pointColors) == 0) "black" else input$pointColors
+    
+    violin_border <- if (is.null(input$violinBorder) || length(input$violinBorder) == 0) "grey" else input$violinBorder
+    bean_border <- if (is.null(input$beanBorder) || length(input$beanBorder) == 0) "grey" else input$beanBorder
+    
+    point_transparency <- if (is.null(input$pointTransparency) || length(input$pointTransparency) == 0) 50 else as.numeric(input$pointTransparency)
+    point_size <- if (is.null(input$pointSize) || length(input$pointSize) == 0) 10 else as.numeric(input$pointSize)
 
     if (plot_engine == "ggplot") {
       library(ggplot2)
@@ -317,9 +343,9 @@ shinyServer(function(input, output, session) {
       df_long$Group <- factor(df_long$Group, levels = colnames(plot_data))
       
       # Parse colours
-      my_colours <- parse_colours(input$myColours)
-      my_colours_2 <- parse_colours(input$myOtherPlotColours)
-      point_colors <- parse_colours(input$pointColors)
+      my_colours <- parse_colours(my_colours_val)
+      my_colours_2 <- parse_colours(my_other_colours_val)
+      point_colors <- parse_colours(point_colors_val)
       
       nr_of_samples <- ncol(plot_data)
       # Always recycle color vectors to match exact number of samples so ggplot manual scale never errors
@@ -327,20 +353,16 @@ shinyServer(function(input, output, session) {
       my_colours_2 <- rep(my_colours_2, length.out = nr_of_samples)
       point_colors <- rep(point_colors, length.out = nr_of_samples)
       
-      plot_colours <- if (input$plotType == "0") my_colours else my_colours_2
+      plot_colours <- if (plot_type == "0") my_colours else my_colours_2
       
-      # Initialize ggplot
       # Initialize ggplot and Plot Types
-      if (input$plotType == "0") { # Boxplot
-        my_varwidth <- (input$myVarwidth == TRUE)
-        my_notch <- (input$myNotch == TRUE)
-        
+      if (plot_type == "0") { # Boxplot
         # Get natively calculated boxplot statistics matching the whiskerType (Tukey, Spear, Altman)
         bp_stats <- boxplot_stats()
         
         notchlower_val <- bp_stats$conf[1, ]
         notchupper_val <- bp_stats$conf[2, ]
-        if (isTRUE(input$logScale)) {
+        if (log_scale) {
           # Safely transform to log10 space since scale_y_log10 doesn't automatically transform custom aesthetics
           notchlower_val <- log10(pmax(1e-10, notchlower_val))
           notchupper_val <- log10(pmax(1e-10, notchupper_val))
@@ -377,7 +399,7 @@ shinyServer(function(input, output, session) {
         df_outliers <- df_outliers[df_outliers$Value < df_outliers$ymin | df_outliers$Value > df_outliers$ymax, ]
         
         # Overlay outliers if they are NOT already showing all points
-        if (!input$showDataPoints && nrow(df_outliers) > 0) {
+        if (!show_data_points && nrow(df_outliers) > 0) {
           p <- p + geom_point(
             data = df_outliers,
             aes(x = Group, y = Value),
@@ -391,20 +413,20 @@ shinyServer(function(input, output, session) {
         # Initialize ggplot for Violin/Bean plot
         p <- ggplot(df_long, aes(x = Group, y = Value, fill = Group))
         
-        if (input$otherPlotType == "0") { # Violin
+        if (other_plot_type == "0") { # Violin
           p <- p + geom_violin(
-            color = input$violinBorder,
+            color = violin_border,
             width = 0.8
           )
         } else { # Beanplot
           p <- p + geom_violin(
-            color = input$beanBorder,
+            color = bean_border,
             width = 0.8,
             alpha = 0.7
           )
           
           # Median/Mean crossbar
-          center_fun <- if (input$beanPlotMedianMean == 0) "median" else "mean"
+          center_fun <- if (bean_plot_median_mean == 0) "median" else "mean"
           p <- p + stat_summary(
             fun = center_fun,
             geom = "crossbar",
@@ -432,23 +454,23 @@ shinyServer(function(input, output, session) {
       p <- p + scale_fill_manual(values = plot_colours)
       
       # Data points overlay
-      if (input$showDataPoints) {
-        pt_trans <- 1 - (input$pointTransparency / 100)
-        pt_sz <- input$pointSize / 10
+      if (show_data_points) {
+        pt_trans <- 1 - (point_transparency / 100)
+        pt_sz <- point_size / 10
         pt_col <- point_colors[1]
         
         # Specify data and mapping for Boxplot type since p uses df_stats as default
-        points_data <- if (input$plotType == "0") df_long else NULL
-        points_aes <- if (input$plotType == "0") aes(y = Value) else NULL
+        points_data <- if (plot_type == "0") df_long else NULL
+        points_aes <- if (plot_type == "0") aes(y = Value) else NULL
         
-        if (input$datapointType == 1) { # Beeswarm / Minimal jitter
+        if (datapoint_type == 1) { # Beeswarm / Minimal jitter
           p <- p + geom_jitter(
             data = points_data,
             mapping = points_aes,
             width = 0.05, height = 0,
             color = pt_col, size = pt_sz, alpha = pt_trans
           )
-        } else if (input$datapointType == 2) { # Jittered
+        } else if (datapoint_type == 2) { # Jittered
           p <- p + geom_jitter(
             data = points_data,
             mapping = points_aes,
@@ -466,7 +488,7 @@ shinyServer(function(input, output, session) {
       }
       
       # Means and CIs for Boxplot
-      if (input$addMeans && input$plotType == "0") {
+      if (add_means && plot_type == "0") {
         p <- p + stat_summary(
           data = df_long,
           aes(x = Group, y = Value),
@@ -478,12 +500,12 @@ shinyServer(function(input, output, session) {
           inherit.aes = FALSE
         )
         
-        if (input$addMeanCI) {
+        if (add_mean_ci) {
           ci_fun <- function(x) {
             n <- sum(!is.na(x))
             if (n <= 1) return(c(ymin = NA, ymax = NA))
             se <- sd(x, na.rm = TRUE) / sqrt(n)
-            ci_level <- as.numeric(input$meanCI) / 100
+            ci_level <- mean_ci / 100
             t_val <- qt((1 + ci_level) / 2, df = n - 1)
             me <- t_val * se
             m <- mean(x, na.rm = TRUE)
@@ -503,20 +525,17 @@ shinyServer(function(input, output, session) {
       }
       
       # Log Scale
-      if (isTRUE(input$logScale)) {
+      if (log_scale) {
         p <- p + scale_y_log10()
       }
       
       # Labels & Font sizes
       p <- p + labs(
-        title = input$myTitle,
-        subtitle = input$mySubtitle,
-        x = input$myXlab,
-        y = input$myYlab
+        title = my_title,
+        subtitle = my_subtitle,
+        x = my_xlab,
+        y = my_ylab
       )
-      
-      # Orientation
-      my_orientation <- (input$myOrientation == 1)
       
       # Resolve Y limits
       ymin <- NA
@@ -524,13 +543,13 @@ shinyServer(function(input, output, session) {
       xmin <- NA
       xmax <- NA
       
-      if (input$ylimit != "" && !my_orientation) {
-        ymin <- as.numeric(gsub("\\s", "", strsplit(input$ylimit, ",")[[1]][1]))
-        ymax <- as.numeric(gsub("\\s", "", strsplit(input$ylimit, ",")[[1]][2]))
+      if (ylimit_val != "" && !my_orientation) {
+        ymin <- as.numeric(gsub("\\s", "", strsplit(ylimit_val, ",")[[1]][1]))
+        ymax <- as.numeric(gsub("\\s", "", strsplit(ylimit_val, ",")[[1]][2]))
       }
-      if (input$xlimit != "" && my_orientation) {
-        xmin <- as.numeric(gsub("\\s", "", strsplit(input$xlimit, ",")[[1]][1]))
-        xmax <- as.numeric(gsub("\\s", "", strsplit(input$xlimit, ",")[[1]][2]))
+      if (xlimit_val != "" && my_orientation) {
+        xmin <- as.numeric(gsub("\\s", "", strsplit(xlimit_val, ",")[[1]][1]))
+        xmax <- as.numeric(gsub("\\s", "", strsplit(xlimit_val, ",")[[1]][2]))
       }
       
       lims <- if (!my_orientation && !is.na(ymin)) {
@@ -557,18 +576,18 @@ shinyServer(function(input, output, session) {
       axis_line_color <- "#475569"
       plot_title_hjust <- 0.5
       
-      if (input$styleGuide == "nature") {
+      if (style_guide == "nature") {
         style_font <- "sans"
-      } else if (input$styleGuide == "science") {
+      } else if (style_guide == "science") {
         style_font <- "serif"
-      } else if (input$styleGuide == "economist") {
+      } else if (style_guide == "economist") {
         style_font <- "sans"
         bg_fill <- "#e4eef2"
         panel_bg_fill <- "#e4eef2"
         grid_color <- "white"
         axis_line_color <- "#1e293b"
         plot_title_hjust <- 0
-      } else if (input$styleGuide == "ft") {
+      } else if (style_guide == "ft") {
         style_font <- "serif"
         bg_fill <- "#fff1e5"
         panel_bg_fill <- "#fff1e5"
@@ -580,11 +599,11 @@ shinyServer(function(input, output, session) {
       # Theme
       p <- p + theme_minimal(base_family = style_font) +
         theme(
-          plot.title = element_text(size = input$cexTitle * 1.5, face = "bold", hjust = plot_title_hjust),
-          plot.subtitle = element_text(size = input$cexTitle * 1.1, hjust = plot_title_hjust, color = "#475569"),
-          axis.title.x = element_text(size = input$cexAxislabel * 1.2),
-          axis.title.y = element_text(size = input$cexAxislabel * 1.2),
-          axis.text = element_text(size = input$cexAxis * 1.1),
+          plot.title = element_text(size = cex_title * 1.5, face = "bold", hjust = plot_title_hjust),
+          plot.subtitle = element_text(size = cex_title * 1.1, hjust = plot_title_hjust, color = "#475569"),
+          axis.title.x = element_text(size = cex_axislabel * 1.2),
+          axis.title.y = element_text(size = cex_axislabel * 1.2),
+          axis.text = element_text(size = cex_axis * 1.1),
           legend.position = "none",
           panel.background = element_rect(fill = panel_bg_fill, color = NA),
           plot.background = element_rect(fill = bg_fill, color = NA),
@@ -593,11 +612,11 @@ shinyServer(function(input, output, session) {
         )
         
       # Gridlines
-      if (input$addGrid == 0) {
+      if (add_grid == 0) {
         p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
-      } else if (input$addGrid == 2) { # X only (perpendicular to X)
+      } else if (add_grid == 2) { # X only (perpendicular to X)
         p <- p + theme(panel.grid.major.y = element_blank(), panel.grid.minor = element_blank(), panel.grid.major.x = element_line(color = grid_color))
-      } else if (input$addGrid == 3) { # Y only (perpendicular to Y)
+      } else if (add_grid == 3) { # Y only (perpendicular to Y)
         p <- p + theme(panel.grid.major.x = element_blank(), panel.grid.minor = element_blank(), panel.grid.major.y = element_line(color = grid_color))
       } else {
         p <- p + theme(
@@ -607,12 +626,12 @@ shinyServer(function(input, output, session) {
       }
       
       # Display N count text at top/right if requested
-      if (input$showNrOfPoints) {
+      if (show_nr_of_points) {
         # Calculate stats for the labels
         nr_points <- sapply(plot_data, function(x) sum(!is.na(x)))
         df_labels <- data.frame(
           Group = factor(colnames(plot_data), levels = colnames(plot_data)),
-          y_pos = if (isTRUE(input$logScale)) {
+          y_pos = if (log_scale) {
             10^(log10(max(plot_data, na.rm = TRUE)) + 0.1)
           } else {
             max(plot_data, na.rm = TRUE) * 1.05
@@ -625,7 +644,7 @@ shinyServer(function(input, output, session) {
           data = df_labels,
           aes(x = Group, y = y_pos, label = label),
           inherit.aes = FALSE,
-          size = input$cexAxis * 0.35,
+          size = cex_axis * 0.35,
           color = "#475569",
           vjust = 0
         )
@@ -639,14 +658,14 @@ shinyServer(function(input, output, session) {
     bg_fill <- "white"
     style_font <- ""
     
-    if (input$styleGuide == "nature") {
+    if (style_guide == "nature") {
       style_font <- "sans"
-    } else if (input$styleGuide == "science") {
+    } else if (style_guide == "science") {
       style_font <- "serif"
-    } else if (input$styleGuide == "economist") {
+    } else if (style_guide == "economist") {
       style_font <- "sans"
       bg_fill <- "#e4eef2"
-    } else if (input$styleGuide == "ft") {
+    } else if (style_guide == "ft") {
       style_font <- "serif"
       bg_fill <- "#fff1e5"
     }
@@ -663,8 +682,8 @@ shinyServer(function(input, output, session) {
     not_plot_points <- seq_len(nr_of_samples)
     plot_points <- integer(0)
 
-    if (input$plotDataPoints) {
-      nr_needed <- as.numeric(input$nrOfDataPoints)
+    if (plot_data_points) {
+      nr_needed <- nr_of_data_points
       not_plot_points <- integer(0)
       for (i in seq_len(nr_of_samples)) {
         if (sum(!is.na(plot_data[[i]])) < nr_needed) {
@@ -676,9 +695,9 @@ shinyServer(function(input, output, session) {
       }
     }
 
-    my_colours <- parse_colours(input$myColours)
-    my_colours_2 <- parse_colours(input$myOtherPlotColours)
-    point_colors <- parse_colours(input$pointColors)
+    my_colours <- parse_colours(my_colours_val)
+    my_colours_2 <- parse_colours(my_other_colours_val)
+    point_colors <- parse_colours(point_colors_val)
 
     # Replicate colors if only one is provided
     if (length(my_colours) == 1) {
@@ -691,7 +710,7 @@ shinyServer(function(input, output, session) {
       point_colors <- rep(point_colors, nr_of_samples)
     }
 
-    point_t <- 1 - (input$pointTransparency / 100)
+    point_t <- 1 - (point_transparency / 100)
     point_c <- NA
     if (point_t < 1) {
       point_c <- rgb(
@@ -703,26 +722,23 @@ shinyServer(function(input, output, session) {
       point_c <- point_colors
     }
 
-    my_orientation <- (input$myOrientation == 1)
-    my_varwidth <- (input$myVarwidth == TRUE)
-    my_notch <- (input$myNotch == TRUE)
     my_log <- ""
     xmin <- NA
     xmax <- NA
     ymin <- NA
     ymax <- NA
 
-    if (isTRUE(input$logScale)) {
+    if (log_scale) {
       my_log <- if (my_orientation) "x" else "y"
     }
 
-    if (input$ylimit != "" && !my_orientation) {
-      ymin <- as.numeric(gsub("\\s", "", strsplit(input$ylimit, ",")[[1]][1]))
-      ymax <- as.numeric(gsub("\\s", "", strsplit(input$ylimit, ",")[[1]][2]))
+    if (ylimit_val != "" && !my_orientation) {
+      ymin <- as.numeric(gsub("\\s", "", strsplit(ylimit_val, ",")[[1]][1]))
+      ymax <- as.numeric(gsub("\\s", "", strsplit(ylimit_val, ",")[[1]][2]))
     }
-    if (input$xlimit != "" && my_orientation) {
-      xmin <- as.numeric(gsub("\\s", "", strsplit(input$xlimit, ",")[[1]][1]))
-      xmax <- as.numeric(gsub("\\s", "", strsplit(input$xlimit, ",")[[1]][2]))
+    if (xlimit_val != "" && my_orientation) {
+      xmin <- as.numeric(gsub("\\s", "", strsplit(xlimit_val, ",")[[1]][1]))
+      xmax <- as.numeric(gsub("\\s", "", strsplit(xlimit_val, ",")[[1]][2]))
     }
 
     # Calculate a shared default range for consistent axes across plot types
@@ -730,8 +746,8 @@ shinyServer(function(input, output, session) {
       NULL
     } else {
       r <- range(plot_data, na.rm = TRUE)
-      if (input$showNrOfPoints) {
-        if (isTRUE(input$logScale) && length(r[r > 0]) > 0) {
+      if (show_nr_of_points) {
+        if (log_scale && length(r[r > 0]) > 0) {
           # Log scale requires multiplicative expansion to prevent negatives
           c(r[1], r[2] * (10^(diff(log10(r[r > 0])) * 0.15)))
         } else {
@@ -744,48 +760,47 @@ shinyServer(function(input, output, session) {
       }
     }
 
-    vals_lim <- if (!my_orientation && input$ylimit != "") {
+    vals_lim <- if (!my_orientation && ylimit_val != "") {
       c(ymin, ymax)
-    } else if (my_orientation && input$xlimit != "") {
+    } else if (my_orientation && xlimit_val != "") {
       c(xmin, xmax)
     } else {
       shared_lim
     }
 
-    xaxis_label_angle <- if (input$xaxisLabelAngle) 2 else 1
-    par(las = xaxis_label_angle)
+    par(las = if (xaxis_label_angle) 2 else 1)
 
-    if (input$plotType == "0") { # Boxplot
+    if (plot_type == "0") { # Boxplot
       boxplot(
         plot_data_m,
-        main = input$myTitle,
-        sub = input$mySubtitle,
-        xlab = input$myXlab,
-        ylab = input$myYlab,
+        main = my_title,
+        sub = my_subtitle,
+        xlab = my_xlab,
+        ylab = my_ylab,
         col = my_colours,
         horizontal = my_orientation,
         varwidth = my_varwidth,
         notch = my_notch,
-        outline = !input$showDataPoints,
+        outline = !show_data_points,
         range = my_range(),
         log = my_log,
         ylim = vals_lim,
-        las = xaxis_label_angle,
+        las = if (xaxis_label_angle) 2 else 1,
         frame.plot = FALSE,
         # Font sizes
-        cex.main = input$cexTitle / 10,
-        cex.lab = input$cexAxislabel / 10,
-        cex.axis = input$cexAxis / 10
+        cex.main = cex_title / 10,
+        cex.lab = cex_axislabel / 10,
+        cex.axis = cex_axis / 10
       )
     } else {
-      if (input$otherPlotType == "0") { # Violin plot
+      if (other_plot_type == "0") { # Violin plot
         if (length(not_plot_points) > 0) {
           vioplot(
             as.list(data.frame(plot_data_m)),
             col = my_colours_2,
             horizontal = my_orientation,
-            border = input$violinBorder,
-            cex.axis = input$cexAxis / 10,
+            border = violin_border,
+            cex.axis = cex_axis / 10,
             ylim = vals_lim,
             names = colnames(plot_data_m),
             log = my_log
@@ -805,24 +820,24 @@ shinyServer(function(input, output, session) {
               c(0.5, nr_of_samples + 0.5)
             }
           )
-          axis(if (my_orientation) 1 else 2, cex.axis = input$cexAxis / 10)
+          axis(if (my_orientation) 1 else 2, cex.axis = cex_axis / 10)
           axis(
             if (my_orientation) 2 else 1,
             at = seq_len(nr_of_samples),
             labels = colnames(plot_data),
-            cex.axis = input$cexAxis / 10
+            cex.axis = cex_axis / 10
           )
         }
         title(
-          main = input$myTitle,
-          sub = input$mySubtitle,
-          xlab = input$myXlab,
-          ylab = input$myYlab,
-          cex.main = input$cexTitle / 10,
-          cex.lab = input$cexAxislabel / 10
+          main = my_title,
+          sub = my_subtitle,
+          xlab = my_xlab,
+          ylab = my_ylab,
+          cex.main = cex_title / 10,
+          cex.lab = cex_axislabel / 10
         )
       } else { # Bean plot
-        my_beanplot_center <- if (input$beanPlotMedianMean == 0) {
+        my_beanplot_center <- if (bean_plot_median_mean == 0) {
           "median"
         } else {
           "mean"
@@ -839,9 +854,9 @@ shinyServer(function(input, output, session) {
               my_colours_2
             },
             horizontal = my_orientation,
-            border = input$beanBorder,
-            what = c(1, 1, 1, as.logical(as.numeric(input$beanPlotMedianMean))),
-            cex.axis = input$cexAxis / 10,
+            border = bean_border,
+            what = c(1, 1, 1, as.logical(bean_plot_median_mean)),
+            cex.axis = cex_axis / 10,
             overallline = my_beanplot_center,
             names = colnames(plot_data)[not_plot_points],
             frame.plot = FALSE,
@@ -851,7 +866,7 @@ shinyServer(function(input, output, session) {
             if (my_orientation) 2 else 1,
             at = seq_len(nr_of_samples),
             labels = colnames(plot_data),
-            cex.axis = input$cexAxis / 10
+            cex.axis = cex_axis / 10
           )
         } else {
           plot(
@@ -868,36 +883,36 @@ shinyServer(function(input, output, session) {
               c(0.5, nr_of_samples + 0.5)
             }
           )
-          axis(if (my_orientation) 1 else 2, cex.axis = input$cexAxis / 10)
+          axis(if (my_orientation) 1 else 2, cex.axis = cex_axis / 10)
           axis(
             if (my_orientation) 2 else 1,
             at = seq_len(nr_of_samples),
             labels = colnames(plot_data),
-            cex.axis = input$cexAxis / 10
+            cex.axis = cex_axis / 10
           )
         }
         title(
-          main = input$myTitle,
-          sub = input$mySubtitle,
-          xlab = input$myXlab,
-          ylab = input$myYlab,
-          cex.main = input$cexTitle / 10,
-          cex.lab = input$cexAxislabel / 10
+          main = my_title,
+          sub = my_subtitle,
+          xlab = my_xlab,
+          ylab = my_ylab,
+          cex.main = cex_title / 10,
+          cex.lab = cex_axislabel / 10
         )
       }
     }
 
     # Add grid
-    if (input$addGrid == 1) {
+    if (add_grid == 1) {
       grid()
-    } else if (input$addGrid == 2) {
+    } else if (add_grid == 2) {
       grid(nx = NULL, ny = NA)
-    } else if (input$addGrid == 3) {
+    } else if (add_grid == 3) {
       grid(nx = NA, ny = NULL)
     }
 
     # Samples means
-    if (input$addMeans && input$plotType == "0") {
+    if (add_means && plot_type == "0") {
       boxplot_means <- colMeans(plot_data, na.rm = TRUE)
       if (my_orientation) {
         points(boxplot_means, seq_along(boxplot_means), pch = 18, col = "red")
@@ -906,13 +921,13 @@ shinyServer(function(input, output, session) {
       }
 
       # Add CI of means
-      if (input$addMeanCI) {
+      if (add_mean_ci) {
         for (i in seq_along(plot_data)) {
           my_sample <- na.omit(plot_data[[i]])
           n <- length(my_sample)
           if (n > 1) {
             standard_error <- sd(my_sample) / sqrt(n)
-            ci_level <- as.numeric(input$meanCI) / 100
+            ci_level <- mean_ci / 100
             t_value <- qt((1 + ci_level) / 2, df = n - 1)
             margin_error <- t_value * standard_error
             lower_ci <- boxplot_means[i] - margin_error
@@ -945,10 +960,10 @@ shinyServer(function(input, output, session) {
     }
 
     # Add numbers of data points
-    if (input$showNrOfPoints) {
+    if (show_nr_of_points) {
       nr_points <- boxplot_stats()$n
       if (my_orientation) {
-        pos_x <- if (isTRUE(input$logScale)) 10^par("usr")[2] else par("usr")[2]
+        pos_x <- if (log_scale) 10^par("usr")[2] else par("usr")[2]
         text(
           x = pos_x,
           y = seq_along(nr_points),
@@ -956,7 +971,7 @@ shinyServer(function(input, output, session) {
           pos = 2
         )
       } else {
-        pos_y <- if (isTRUE(input$logScale)) 10^par("usr")[4] else par("usr")[4]
+        pos_y <- if (log_scale) 10^par("usr")[4] else par("usr")[4]
         text(
           x = seq_along(nr_points),
           y = pos_y,
@@ -967,30 +982,30 @@ shinyServer(function(input, output, session) {
     }
 
     # Add data points if selected or if forced by plotDataPoints limit
-    if (input$showDataPoints || length(plot_points) > 0) {
+    if (show_data_points || length(plot_points) > 0) {
       plot_data_points <- plot_data
-      if (!input$showDataPoints && length(plot_points) > 0) {
+      if (!show_data_points && length(plot_points) > 0) {
         # Only plot points for samples below the limit
         plot_data_points[, not_plot_points] <- NA
       }
 
-      if (input$datapointType == 1) { # Bee swarm
+      if (datapoint_type == 1) { # Bee swarm
         beeswarm(
           plot_data_points,
           add = TRUE,
           col = point_c,
           horizontal = my_orientation,
-          cex = input$pointSize / 10,
+          cex = point_size / 10,
           pch = 16
         )
       } else { # Jittered or Default
         jittered_points(
           plot_data_points,
           my_orientation,
-          input$datapointType,
+          datapoint_type,
           point_colors,
-          input$pointTransparency,
-          input$pointSize / 10
+          point_transparency,
+          point_size / 10
         )
       }
     }
