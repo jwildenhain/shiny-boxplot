@@ -10,38 +10,42 @@ def log(msg):
     sys.stderr.flush()
 
 def generate_plot(arguments):
-    plot_type = arguments.get("plot_type", "boxplot")
-    data_str = arguments.get("data", "")
+    # Extract nested sections (supporting the new JSON Schema spec)
+    data_config = arguments.get("data_config", {})
+    visualization = arguments.get("visualization", {})
+    styling = arguments.get("styling", {})
+    overlays = arguments.get("overlays", {})
+    
+    # Fallback to old flat structure if present (for backward compatibility)
+    data_str = data_config.get("values", arguments.get("data", ""))
     output_path = arguments.get("output_path", "")
     
-    title = arguments.get("title", "")
-    subtitle = arguments.get("subtitle", "")
-    xlab = arguments.get("xlab", "")
-    ylab = arguments.get("ylab", "")
+    plot_type = visualization.get("plot_type", arguments.get("plot_type", "boxplot"))
+    plot_engine = visualization.get("plot_engine", arguments.get("plot_engine", "classic"))
+    style_guide = visualization.get("style_guide", arguments.get("style_guide", "none"))
+    orientation = visualization.get("orientation", arguments.get("orientation", "vertical"))
+    log_scale = visualization.get("log_scale", arguments.get("log_scale", False))
     
-    colors = arguments.get("colors", [])
-    orientation = arguments.get("orientation", "vertical")
-    show_points = arguments.get("show_points", False)
-    point_type = arguments.get("point_type", "jittered")
-    point_size = arguments.get("point_size", 1.0)
-    point_transparency = arguments.get("point_transparency", 50)
-    add_grid = arguments.get("add_grid", "none")
+    title = styling.get("title", arguments.get("title", ""))
+    subtitle = styling.get("subtitle", arguments.get("subtitle", ""))
+    xlab = styling.get("xlab", arguments.get("xlab", ""))
+    ylab = styling.get("ylab", arguments.get("ylab", ""))
+    colors = styling.get("colors", arguments.get("colors", []))
+    add_grid = styling.get("add_grid", arguments.get("add_grid", "none"))
     
-    add_means = arguments.get("add_means", False)
-    add_mean_ci = arguments.get("add_mean_ci", False)
-    mean_ci_level = arguments.get("mean_ci_level", 95)
-    
-    varwidth = arguments.get("varwidth", False)
-    notch = arguments.get("notch", False)
-    log_scale = arguments.get("log_scale", False)
-    
-    # New options
-    plot_engine = arguments.get("plot_engine", "classic")
-    style_guide = arguments.get("style_guide", "none")
+    show_points = overlays.get("show_points", arguments.get("show_points", False))
+    point_type = overlays.get("point_type", arguments.get("point_type", "jittered"))
+    point_size = overlays.get("point_size", arguments.get("point_size", 1.0))
+    point_transparency = overlays.get("point_transparency", arguments.get("point_transparency", 50))
+    add_means = overlays.get("add_means", arguments.get("add_means", False))
+    add_mean_ci = overlays.get("add_mean_ci", arguments.get("add_mean_ci", False))
+    mean_ci_level = overlays.get("mean_ci_level", arguments.get("mean_ci_level", 95))
+    varwidth = overlays.get("varwidth", arguments.get("varwidth", False))
+    notch = overlays.get("notch", arguments.get("notch", False))
     
     # Validation
     if not data_str:
-        raise ValueError("Missing 'data' argument")
+        raise ValueError("Missing 'data' or 'data_config.values' argument")
     if not output_path:
         raise ValueError("Missing 'output_path' argument")
         
@@ -565,106 +569,99 @@ def main():
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
-                                        "plot_type": {
-                                            "type": "string",
-                                            "enum": ["boxplot", "violin", "beanplot"],
-                                            "description": "The type of plot to generate"
+                                        "data_config": {
+                                            "type": "object",
+                                            "description": "Input data configurations",
+                                            "properties": {
+                                                "values": {
+                                                    "type": "string",
+                                                    "description": "The input data as CSV or TSV string where columns represent different samples/conditions"
+                                                }
+                                            },
+                                            "required": ["values"]
                                         },
-                                        "data": {
-                                            "type": "string",
-                                            "description": "The input data as CSV or TSV string, where columns represent different samples/conditions"
+                                        "visualization": {
+                                            "type": "object",
+                                            "description": "Plot rendering and engine structural parameters",
+                                            "properties": {
+                                                "plot_type": {
+                                                    "type": "string",
+                                                    "enum": ["boxplot", "violin", "beanplot"],
+                                                    "description": "The type of plot to generate"
+                                                },
+                                                "plot_engine": {
+                                                    "type": "string",
+                                                    "enum": ["classic", "ggplot2"],
+                                                    "description": "Plotting engine: 'classic' for Base R or 'ggplot2' for modern rendering (default: classic)"
+                                                },
+                                                "style_guide": {
+                                                    "type": "string",
+                                                    "enum": ["none", "nature", "science", "economist", "ft"],
+                                                    "description": "Visual preset style guide: 'none', 'nature', 'science', 'economist', or 'ft' (default: none)"
+                                                },
+                                                "orientation": {
+                                                    "type": "string",
+                                                    "enum": ["vertical", "horizontal"],
+                                                    "description": "Orientation of the plot (default: vertical)"
+                                                },
+                                                "log_scale": {
+                                                    "type": "boolean",
+                                                    "description": "Whether to use a logarithmic scale (log10) for the numeric axis"
+                                                }
+                                            },
+                                            "required": ["plot_type"]
                                         },
-                                        "title": {
-                                            "type": "string",
-                                            "description": "Main title of the plot"
+                                        "styling": {
+                                            "type": "object",
+                                            "description": "Custom aesthetic and text properties",
+                                            "properties": {
+                                                "title": { "type": "string", "description": "Main title of the plot" },
+                                                "subtitle": { "type": "string", "description": "Subtitle of the plot" },
+                                                "xlab": { "type": "string", "description": "X-axis label" },
+                                                "ylab": { "type": "string", "description": "Y-axis label" },
+                                                "colors": {
+                                                    "type": "array",
+                                                    "items": { "type": "string" },
+                                                    "description": "Array of HEX colors for each sample/condition"
+                                                },
+                                                "add_grid": {
+                                                    "type": "string",
+                                                    "enum": ["none", "both", "x", "y"],
+                                                    "description": "Background grid: 'none', 'both', 'x', or 'y' (default: none)"
+                                                }
+                                            }
                                         },
-                                        "subtitle": {
-                                            "type": "string",
-                                            "description": "Subtitle of the plot"
-                                        },
-                                        "xlab": {
-                                            "type": "string",
-                                            "description": "X-axis label"
-                                        },
-                                        "ylab": {
-                                            "type": "string",
-                                            "description": "Y-axis label"
-                                        },
-                                        "colors": {
-                                            "type": "array",
-                                            "items": { "type": "string" },
-                                            "description": "Array of HEX colors for each sample/condition"
-                                        },
-                                        "orientation": {
-                                            "type": "string",
-                                            "enum": ["vertical", "horizontal"],
-                                            "description": "Orientation of the plot (default: vertical)"
-                                        },
-                                        "show_points": {
-                                            "type": "boolean",
-                                            "description": "Whether to display individual data points on top of the plot"
-                                        },
-                                        "point_type": {
-                                            "type": "string",
-                                            "enum": ["normal", "jittered", "beeswarm"],
-                                            "description": "The arrangement style for data points (default: jittered)"
-                                        },
-                                        "point_size": {
-                                            "type": "number",
-                                            "description": "Size factor of the plotted data points (e.g. 1.0)"
-                                        },
-                                        "point_transparency": {
-                                            "type": "number",
-                                            "description": "Transparency level of the plotted points from 0 to 100 (default: 50)"
-                                        },
-                                        "add_grid": {
-                                            "type": "string",
-                                            "enum": ["none", "both", "x", "y"],
-                                            "description": "Whether and where to add a background grid (default: none)"
-                                        },
-                                        "add_means": {
-                                            "type": "boolean",
-                                            "description": "For boxplots, whether to plot the mean of each sample as a red diamond"
-                                        },
-                                        "add_mean_ci": {
-                                            "type": "boolean",
-                                            "description": "For boxplots, whether to add confidence intervals for the sample means"
-                                        },
-                                        "mean_ci_level": {
-                                            "type": "integer",
-                                            "enum": [83, 90, 95],
-                                            "description": "The confidence level percentage for the means CI (default: 95)"
-                                        },
-                                        "varwidth": {
-                                            "type": "boolean",
-                                            "description": "For boxplots, whether box widths should be proportional to square-roots of observations counts"
-                                        },
-                                        "notch": {
-                                            "type": "boolean",
-                                            "description": "For boxplots, whether to add notches"
-                                        },
-                                        "log_scale": {
-                                            "type": "boolean",
-                                            "description": "Whether to use a logarithmic scale (log10) for the numeric axis"
-                                        },
-                                        "plot_engine": {
-                                            "type": "string",
-                                            "enum": ["classic", "ggplot2"],
-                                            "description": "The plotting engine to use: 'classic' for Base R or 'ggplot2' for modern rendering (default: classic)"
-                                        },
-                                        "style_guide": {
-                                            "type": "string",
-                                            "enum": ["none", "nature", "science", "economist", "ft"],
-                                            "description": "Visual preset style guide to apply: 'none', 'nature', 'science', 'economist', or 'ft' (default: none)"
+                                        "overlays": {
+                                            "type": "object",
+                                            "description": "Raw data point and statistical overlay properties",
+                                            "properties": {
+                                                "show_points": { "type": "boolean", "description": "Whether to display individual data points on top of the plot" },
+                                                "point_type": {
+                                                    "type": "string",
+                                                    "enum": ["normal", "jittered", "beeswarm"],
+                                                    "description": "The arrangement style for data points (default: jittered)"
+                                                },
+                                                "point_size": { "type": "number", "description": "Size factor of the plotted data points (e.g. 1.0)" },
+                                                "point_transparency": { "type": "number", "description": "Transparency level of the plotted points from 0 to 100 (default: 50)" },
+                                                "add_means": { "type": "boolean", "description": "For boxplots, whether to plot the mean of each sample as a red diamond" },
+                                                "add_mean_ci": { "type": "boolean", "description": "For boxplots, whether to add confidence intervals for the sample means" },
+                                                "mean_ci_level": {
+                                                    "type": "integer",
+                                                    "enum": [83, 90, 95],
+                                                    "description": "The confidence level percentage for the means CI (default: 95)"
+                                                },
+                                                "varwidth": { "type": "boolean", "description": "For boxplots, whether box widths should be proportional to square-roots of observations counts" },
+                                                "notch": { "type": "boolean", "description": "For boxplots, whether to add notches showing 95% CI of medians" }
+                                            }
                                         },
                                         "output_path": {
                                             "type": "string",
                                             "description": "Absolute path where the resulting PNG plot image should be saved"
                                         }
                                     },
-                                    "required": ["plot_type", "data", "output_path"]
+                                    "required": ["data_config", "visualization", "output_path"]
                                 }
-                             }
+                            }
                         ]
                     }
                 }
