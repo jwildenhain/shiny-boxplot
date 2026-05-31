@@ -660,7 +660,40 @@ def main():
                                         }
                                     },
                                     "required": ["data_config", "visualization", "output_path"]
-                                }
+                                },
+                                "examples": [
+                                    {
+                                        "arguments": {
+                                            "data_config": {
+                                                "values": "Group,Value\nSampleA,12.5\nSampleA,14.2\nSampleA,15.8\nSampleB,8.9\nSampleB,10.1\nSampleB,11.5"
+                                            },
+                                            "visualization": {
+                                                "plot_type": "boxplot",
+                                                "plot_engine": "ggplot2",
+                                                "style_guide": "economist",
+                                                "orientation": "vertical",
+                                                "log_scale": false
+                                            },
+                                            "styling": {
+                                                "title": "Comparison of Sample A and Sample B",
+                                                "xlab": "Group",
+                                                "ylab": "Value",
+                                                "colors": ["#0ea5e9", "#ef4444"],
+                                                "add_grid": "y"
+                                            },
+                                            "overlays": {
+                                                "show_points": true,
+                                                "point_type": "jittered",
+                                                "point_size": 1.2,
+                                                "point_transparency": 30,
+                                                "add_means": true,
+                                                "notch": true
+                                            },
+                                            "output_path": "/home/jw/Source/BoxPlotR.shiny/assets/example_plot.png"
+                                        },
+                                        "description": "Generates a publication-quality ggplot2 boxplot with notches, sample means, and jittered data points using the Economist style guide."
+                                    }
+                                ]
                             }
                         ]
                     }
